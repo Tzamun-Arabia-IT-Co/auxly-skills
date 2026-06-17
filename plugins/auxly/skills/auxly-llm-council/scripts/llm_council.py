@@ -426,19 +426,7 @@ def anonymize_text(text: str) -> str:
 
 
 def validate_markdown_plan(text: str) -> Tuple[bool, Optional[str]]:
-    required = [
-        "# Plan",
-        "## Overview",
-        "## Scope",
-        "## Phases",
-        "## Testing Strategy",
-        "## Risks",
-        "## Pros",
-        "## Cons",
-        "## Rollback Plan",
-        "## Edge Cases",
-    ]
-    missing = [header for header in required if header not in text]
+    missing = [header for header in REQUIRED_PLAN_HEADERS if header not in text]
     if missing:
         return False, "missing headers: " + ", ".join(missing)
     return True, None
@@ -670,15 +658,80 @@ def _coerce_text(value: Any) -> str:
     return str(value)
 
 
+REQUIRED_PLAN_HEADERS = [
+    "# Plan",
+    "## Overview",
+    "## Scope",
+    "## Phases",
+    "## Testing Strategy",
+    "## Risks",
+    "## Pros",
+    "## Cons",
+    "## Rollback Plan",
+    "## Edge Cases",
+]
+
+
 def _build_refine_prompt(plan_template: str, task_brief: str, final_plan: str, context: str) -> str:
     notes = context.strip() if context else "No extra context provided."
+    headers = "\n".join(REQUIRED_PLAN_HEADERS)
     return (
-        "You are refining a plan. Return only updated plan markdown that follows the template below.\n\n"
+        "You are refining an existing plan. Apply the refinement request to the current plan and "
+        "return the COMPLETE updated plan as Markdown — no preamble, no commentary, no code fences, "
+        "just the plan itself.\n\n"
+        "Hard requirements:\n"
+        "- Output must be a full plan that keeps EVERY one of these section headers, verbatim:\n"
+        f"{headers}\n"
+        "- Preserve all content that the request does not ask you to change.\n"
+        "- The refinement note is an instruction for editing THIS plan's text. You cannot re-run other "
+        "tools or agents; if a note asks for something outside editing the plan (e.g. 'retry codex'), "
+        "fold its intent into the plan where sensible and otherwise return the current plan unchanged — "
+        "but always return a complete, valid plan.\n\n"
         f"Task brief:\n{task_brief}\n\n"
-        f"Template:\n{plan_template}\n\n"
+        f"Template (for structure reference):\n{plan_template}\n\n"
         f"Current plan:\n{final_plan}\n\n"
         f"Refinement request:\n{notes}\n"
     )
+
+
+def _refine_retry_prompt(prev_output: str, missing_headers: List[str]) -> str:
+    missing = "\n".join(missing_headers)
+    return (
+        "Your previous response was not a valid plan — it is missing these required section headers "
+        "(they must appear verbatim, each on its own line):\n"
+        f"{missing}\n\n"
+        "Return the COMPLETE plan again as Markdown with ALL required sections present. No commentary, "
+        "no code fences — only the plan.\n\n"
+        f"Your previous response:\n{prev_output}\n"
+    )
+
+
+def _run_refine_with_retry(
+    judge: AgentConfig,
+    plan_template: str,
+    task_brief: str,
+    final_plan: str,
+    context: str,
+    timeout: int,
+) -> Tuple[Optional[str], Optional[str]]:
+    """Ask the judge to refine the plan; if the result is missing required
+    headers, re-prompt once with the specific gaps. Returns (plan, error)."""
+    prompt = _build_refine_prompt(plan_template, task_brief, final_plan, context)
+    last_err: Optional[str] = None
+    last_out = ""
+    for attempt in range(2):
+        running = spawn_cli_agent(judge, prompt)
+        raw = collect_cli_output(running, timeout)  # may raise TimeoutError
+        normalized = extract_agent_response(judge, raw).strip()
+        valid, err = validate_markdown_plan(normalized)
+        if valid:
+            return normalized, None
+        last_err, last_out = err, normalized
+        missing = [h for h in REQUIRED_PLAN_HEADERS if h not in normalized]
+        if not missing:
+            break
+        prompt = _refine_retry_prompt(normalized, missing)
+    return None, last_err or "invalid plan"
 
 
 def _rebuild_ui_state_from_run(run_dir: Path) -> Dict[str, Any]:
@@ -796,10 +849,10 @@ def _handle_ui_actions(
                     timestamp=start_ts,
                 )
                 task_brief = build_task_brief(task_spec)
-                prompt = _build_refine_prompt(plan_template, task_brief, final_plan, context)
-                running = spawn_cli_agent(judge, prompt)
                 try:
-                    raw = collect_cli_output(running, args.timeout)
+                    normalized, err = _run_refine_with_retry(
+                        judge, plan_template, task_brief, final_plan, context, args.timeout
+                    )
                 except TimeoutError as exc:
                     _ui_update_judge(
                         ui_state,
@@ -809,20 +862,22 @@ def _handle_ui_actions(
                         errors=[str(exc)],
                         timestamp=_ui_timestamp(),
                     )
-                    _ui_action_result(ui_instance, "refine", "failed", str(exc), None, _ui_timestamp())
+                    _ui_action_result(
+                        ui_instance, "refine", "failed", f"timed out: {exc}", None, _ui_timestamp()
+                    )
                     continue
-                normalized = extract_agent_response(judge, raw).strip()
-                valid, err = validate_markdown_plan(normalized)
-                if not valid:
+                if not normalized:
+                    detail = f"could not produce a valid plan ({err})" if err else "could not produce a valid plan"
                     _ui_update_judge(
                         ui_state,
                         ui_instance,
                         status="needs-fix",
-                        summary=normalized,
+                        summary="Refine did not yield a complete plan. Your current plan is unchanged — "
+                        "try a more specific edit instruction.\n\n" + (err or ""),
                         errors=[err] if err else [],
                         timestamp=_ui_timestamp(),
                     )
-                    _ui_action_result(ui_instance, "refine", "failed", err or "invalid plan", None, _ui_timestamp())
+                    _ui_action_result(ui_instance, "refine", "failed", detail, None, _ui_timestamp())
                     continue
                 refined_name = f"final-plan-refined-{time.strftime('%Y%m%d-%H%M%S')}.md"
                 refined_path = run_dir / refined_name
@@ -1496,6 +1551,15 @@ def main() -> int:
         ui_url = ui_instance.ui_url
         action_stop = threading.Event()
         keepalive = _KeepaliveController()
+        # Restore enough context so Refine still works on a reopened run:
+        # resolve a judge from the saved/auto config and load the plan template.
+        restore_judge: Optional[AgentConfig] = None
+        restore_template: Optional[str] = None
+        try:
+            _, restore_judge = load_agent_configs({}, config_path=get_default_config_path())
+            restore_template = load_text(resolve_path("../references/templates/plan.md"))
+        except Exception:
+            restore_judge, restore_template = None, None
         action_thread = threading.Thread(
             target=_handle_ui_actions,
             args=(
@@ -1507,8 +1571,8 @@ def main() -> int:
                 get_default_config_path(),
                 action_stop,
                 keepalive,
-                None,
-                None,
+                restore_judge,
+                restore_template,
             ),
             name="ui-action-handler",
             daemon=True,
