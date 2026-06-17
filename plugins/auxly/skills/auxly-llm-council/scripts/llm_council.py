@@ -20,7 +20,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import ui_server
 
 RETRY_LIMIT = 2
-DEFAULT_TIMEOUT_SEC = 180
+# Planners write a full structured plan in one shot; opus/large models routinely
+# need more than a couple of minutes, so default generously. Override with --timeout.
+DEFAULT_TIMEOUT_SEC = 600
 DEFAULT_UI_KEEPALIVE_SEC = 20 * 60
 DEFAULT_UI_SESSION_TTL_SEC = 30 * 60
 
@@ -1280,6 +1282,7 @@ def run_planners(
     attempt = 0
     while remaining and attempt <= RETRY_LIMIT:
         running: List[RunningAgent] = []
+        spawn_failures: List[Tuple[AgentConfig, str]] = []
         for planner in remaining:
             prompt = render_planner_prompt(task_spec, plan_template, planner_prompt_template)
             timestamp = _ui_timestamp()
@@ -1292,9 +1295,27 @@ def run_planners(
                 errors=[],
                 timestamp=timestamp,
             )
-            running.append(spawn_cli_agent(planner, prompt))
+            # A planner whose CLI cannot even be launched (missing binary, a model
+            # the account can't use, a Windows .cmd shim, etc.) must not crash the
+            # whole council — degrade it to a failed tile and keep the others going.
+            try:
+                running.append(spawn_cli_agent(planner, prompt))
+            except Exception as exc:  # noqa: BLE001 - surface any launch failure
+                msg = f"could not launch '{planner.name}': {exc}"
+                spawn_failures.append((planner, msg))
+                _ui_upsert_planner(
+                    ui_state,
+                    ui_instance,
+                    planner_id=planner.name,
+                    status="failed",
+                    summary=msg,
+                    errors=[msg],
+                    timestamp=_ui_timestamp(),
+                )
 
         remaining = []
+        for planner, msg in spawn_failures:
+            results.append(AgentResult(name=planner.name, raw_output="", data=None, valid=False, error=msg))
         for entry in running:
             try:
                 raw = collect_cli_output(entry, timeout_sec)
@@ -1374,7 +1395,13 @@ def run_judge(
         errors=[],
         timestamp=start_timestamp,
     )
-    running = spawn_cli_agent(judge, prompt)
+    try:
+        running = spawn_cli_agent(judge, prompt)
+    except Exception as exc:  # noqa: BLE001 - judge CLI failed to launch
+        msg = f"could not launch judge '{judge.name}': {exc}"
+        _ui_update_judge(ui_state, ui_instance, status="failed", summary=msg,
+                         errors=[msg], timestamp=_ui_timestamp())
+        return AgentResult(name=judge.name, raw_output="", data=None, valid=False, error=msg)
     try:
         raw = collect_cli_output(running, timeout_sec)
         timeout_error = None
