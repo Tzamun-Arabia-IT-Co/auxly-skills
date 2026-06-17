@@ -1,20 +1,31 @@
 <div align="center">
   <img src="plugins/auxly/skills/auxly-llm-council/scripts/ui/assets/auxly-logo.png" width="96" alt="Auxly" />
   <h1>Auxly Skills</h1>
-  <p><b>A bias-resistant multi-model planning council, and a live execution dashboard.</b><br/>
-  Two Claude Code skills that work together — or on their own.</p>
+  <p><b>Plan → execute → verify → review → recap — in one shared, live, dark Console.</b><br/>
+  Six Claude Code skills that chain together — or each work on their own.</p>
 </div>
 
 ---
 
 ## What's inside
 
-| Skill | What it does |
-|---|---|
-| **`/auxly-llm-council`** | Convenes a council of installed CLIs (Codex, Claude, Gemini, agy/Antigravity, OpenCode, custom) to write independent implementation plans, anonymizes + randomizes them, then judges and merges into one final plan. Monitored live in a **dark, Auxly-branded** web UI that shows the council roster (agents + models + roles), renders readable Markdown, and surfaces **Risks / Pros / Cons** per plan. If you don't have codex/gemini/agy, it falls back to a **Claude-only persona council** (architect + pragmatist + risk-hawk). |
-| **`/auxly-execute`** | Execute an accepted plan with a **live HTML dashboard**: phase/slice progress, an **Agents & Models** panel (who's *active* vs *idle*, including subagents), **red blockers** that need human action (resolve them in the UI and execution resumes), and **amber warnings** for awareness. Takes the council's `final-plan.md` or a `plan.json`. |
+Six standalone skills that chain into one workflow — **plan → execute → verify → review → recap** —
+all rendering into **one shared, dark, Auxly-branded Console** (one server, one browser tab, stage
+tabs; no new tab per tool). Each skill also works on its own.
 
-Both are **pure Python standard library + a browser** — no third-party packages, no network/CDN, logo embedded. Built to run anywhere.
+| Skill | Stage | What it does |
+|---|---|---|
+| **`/auxly-llm-council`** | Plan | Council of installed CLIs (Codex, Claude, Gemini, agy/Antigravity, OpenCode, custom) writes independent plans, anonymizes + randomizes, judges and merges into one final plan. Dark UI with the council roster, readable Markdown, **Risks / Pros / Cons** per plan. No codex/gemini/agy? Falls back to a **Claude-only persona council** (architect + pragmatist + risk-hawk). |
+| **`/auxly-execute`** | Execute | Run an accepted plan with live phase/slice progress, an **Agents & Models** panel (active vs idle, incl. subagents), a **Checks** panel (build/test/lint), **red blockers** (resolve in-UI → resume), and **amber warnings**. Takes the council's `final-plan.md` or a `plan.json`. |
+| **`/auxly-review`** | Review | Adversarial code/diff review — multiple reviewers find issues, skeptics try to **refute** each so only verified findings survive. Severity + `file:line` + verdict in the Review tab. |
+| **`/auxly-meter`** | — | Live token (and optional ≈cost) meter in the Console header, per agent/model. |
+| **`/auxly-digest`** | — | One-click Markdown recap of a run (shipped / blockers / checks / findings / cost) → Summary tab + `digest.md`. |
+| **`/auxly-board`** | Home | Grid of **all** your runs (council + console) across the directory, in one Board tab. |
+
+All **pure Python standard library + a browser** — no third-party packages, no network/CDN, logo embedded. Built to run anywhere.
+
+The Console buttons (e.g. **Execute ▶**, **Review ▶**) enqueue intents the running Claude session
+picks up, so one tab drives the whole flow while every skill stays independently invocable.
 
 ## Install
 
@@ -30,19 +41,20 @@ git clone https://github.com/waeils/auxly-skills.git
 cd auxly-skills
 ./install.sh           # symlinks into ~/.claude/skills (use --copy to copy)
 ```
-Then restart Claude Code. You'll have `/auxly-llm-council` and `/auxly-execute`.
+Then restart Claude Code. You'll have all six `/auxly-*` skills.
 
 ## Quick start
 
 ```text
-# 1) Plan with the council
-/auxly-llm-council    →  produces ./auxly-council/runs/<ts>/final-plan.md
-
-# 2) Execute it with the live dashboard
-/auxly-execute   →  feed it the final-plan.md, watch progress + resolve blockers
+/auxly-llm-council   →  plan; produces ./auxly-council/runs/<ts>/final-plan.md
+/auxly-execute       →  run it live (Plan + Execute tabs open in the Console)
+/auxly-review        →  adversarial review of the diff (Review tab)
+/auxly-digest        →  recap of the run (Summary tab + digest.md)
+/auxly-board         →  see all runs (Runs tab)
 ```
 
-Or use the dashboard standalone with any `final-plan.md` or `plan.json`.
+Each is standalone — start anywhere. The Console's **Execute ▶ / Review ▶** buttons hand off to the
+next skill in the same tab.
 
 ## Requirements
 - Claude Code
@@ -57,9 +69,15 @@ auxly-skills/
 ├─ .claude-plugin/marketplace.json     # plugin marketplace manifest
 ├─ plugins/auxly/
 │  ├─ .claude-plugin/plugin.json
+│  ├─ shared/console/                  # single-source multi-stage Console engine
 │  └─ skills/
-│     ├─ auxly-llm-council/            # the planning council skill
-│     └─ auxly-execute/           # the execution dashboard skill
+│     ├─ auxly-llm-council/            # plan — multi-model council
+│     ├─ auxly-execute/                # execute — live run dashboard
+│     ├─ auxly-review/                 # review — adversarial code review
+│     ├─ auxly-meter/                  # token/cost meter
+│     ├─ auxly-digest/                 # run recap
+│     └─ auxly-board/                  # all-runs home
+├─ sync-console.sh                     # vendor shared/console into each skill
 ├─ install.sh                          # standalone (non-plugin) installer
 ├─ LICENSE                             # MIT
 └─ README.md

@@ -31,5 +31,9 @@ done
 
 echo
 echo "Done. Restart Claude Code (or run /skills) to pick up:"
-echo "  /auxly-llm-council    — multi-model planning council"
-echo "  /auxly-execute   — live execution dashboard"
+echo "  /auxly-llm-council  — multi-model planning council"
+echo "  /auxly-execute      — live execution dashboard"
+echo "  /auxly-review       — adversarial code review"
+echo "  /auxly-meter        — token/cost meter"
+echo "  /auxly-digest       — run recap"
+echo "  /auxly-board        — all-runs home"

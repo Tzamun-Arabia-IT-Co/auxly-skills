@@ -1,8 +1,18 @@
 {
   "name": "auxly",
-  "description": "Auxly Council (multi-model bias-resistant planning with a branded, embedded live UI) + Auxly Execute Dashboard (execute an accepted plan with a live phase/slice progress, blocker, warning, and agent/subagent dashboard). Pure Python stdlib + browser; no external dependencies.",
+  "description": "Auxly skill suite \u2014 one shared dark Console for plan \u2192 execute \u2192 verify \u2192 review \u2192 recap. Skills: auxly-llm-council (multi-model planning), auxly-execute (live run dashboard), auxly-review (adversarial code review), auxly-meter (token/cost), auxly-digest (recap), auxly-board (all runs). Pure Python stdlib + browser; no external deps.",
   "version": "1.0.0",
-  "author": { "name": "Auxly" },
+  "author": {
+    "name": "Auxly"
+  },
   "homepage": "https://github.com/waeils/auxly-skills",
-  "keywords": ["planning", "council", "multi-agent", "llm", "dashboard", "execution", "auxly"]
+  "keywords": [
+    "planning",
+    "council",
+    "multi-agent",
+    "llm",
+    "dashboard",
+    "execution",
+    "auxly"
+  ]
 }

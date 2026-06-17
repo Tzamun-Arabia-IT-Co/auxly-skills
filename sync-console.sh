@@ -13,7 +13,7 @@ SRC="$ROOT/plugins/auxly/shared/console"
 SKILLS_DIR="$ROOT/plugins/auxly/skills"
 
 # Skills that render into the shared Auxly Console.
-CONSUMERS=(auxly-execute auxly-review auxly-board)
+CONSUMERS=(auxly-execute auxly-review auxly-verify auxly-meter auxly-digest auxly-board)
 
 [ -d "$SRC" ] || { echo "missing console source: $SRC" >&2; exit 1; }
 
