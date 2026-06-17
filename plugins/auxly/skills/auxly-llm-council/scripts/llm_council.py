@@ -346,11 +346,12 @@ def _build_command_and_input(config: AgentConfig, prompt: str) -> Tuple[List[str
             "--disable-slash-commands",
         ]
         args.extend(config.extra_args)
-        args.extend(["-p", prompt])
-        return (
-            args,
-            None,
-        )
+        # Deliver the prompt over stdin, NOT as an argv argument. The judge prompt
+        # embeds every full plan and easily exceeds Windows' ~32 KB command-line
+        # limit (CreateProcess WinError 206: "filename or extension is too long"),
+        # which otherwise stops the judge from launching at all. stdin is unbounded.
+        args.append("-p")
+        return (args, prompt + "\n")
     if kind == "opencode":
         args = ["opencode", "run"]
         args.extend(config.extra_args)
