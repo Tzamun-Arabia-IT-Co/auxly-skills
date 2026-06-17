@@ -80,7 +80,7 @@ Supported `kind` values: `codex`, `claude`, `gemini`, `agy`, `opencode`, `custom
   "task": "Describe the change request here.",
   "agents": {
     "planners": [
-      { "name": "codex", "kind": "codex", "model": "gpt-5.2-codex", "reasoning_effort": "xhigh" },
+      { "name": "codex", "kind": "codex", "reasoning_effort": "xhigh" },
       { "name": "claude-opus", "kind": "claude", "model": "opus" },
       { "name": "agy", "kind": "agy" },
       { "name": "gemini", "kind": "gemini", "model": "gemini-3-pro-preview" }
@@ -90,6 +90,11 @@ Supported `kind` values: `codex`, `claude`, `gemini`, `agy`, `opencode`, `custom
 }
 ```
 
+- `codex` runs through the **`codex` CLI** (`codex exec`), so it uses whatever that CLI is signed
+  into — a ChatGPT-account subscription by default, **no API key, no API billing**. **Omit `model`**
+  so the CLI uses the account's default model. Do **not** pin an API-only model name (e.g.
+  `gpt-5.2-codex`) unless you actually use API-key auth — a ChatGPT account rejects it with
+  `HTTP 400 "model is not supported when using Codex with a ChatGPT account"` and the member fails.
 - `agy` (Antigravity) runs in print mode and returns plain-text Markdown; omit `model` to use the
   CLI's configured default, or set one from `agy models`.
 - `custom` commands (stdin/arg prompt) use `command` + `prompt_mode`. Use `extra_args` to append

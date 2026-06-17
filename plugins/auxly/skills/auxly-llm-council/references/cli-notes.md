@@ -5,7 +5,11 @@
 - JSON streaming: `codex exec --json "..."` outputs JSON Lines events to stdout.
 - Structured output: `codex exec --output-schema ./schema.json -o ./output.json "..."`.
 - Final message is written to stdout; streaming activity goes to stderr.
-- Model override: `codex exec -m gpt-5.2-codex -c model_reasoning_effort=xhigh "..."`.
+- Auth: `codex` uses whatever the CLI is signed into — a ChatGPT-account subscription by default
+  (no API key, no API billing). The council omits `-m` so it runs on the account's default model.
+- Model override: `codex exec -m <model> -c model_reasoning_effort=xhigh "..."`. Only pin a model
+  with API-key auth; ChatGPT-account Codex returns `HTTP 400 "model is not supported when using
+  Codex with a ChatGPT account"` for API-only names like `gpt-5.2-codex`.
 
 ## Claude Code
 - Launch interactive agent: `claude` in the repo directory.
