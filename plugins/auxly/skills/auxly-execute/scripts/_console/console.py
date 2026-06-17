@@ -277,6 +277,10 @@ def c_warning(a):
 
 def c_agent(a):
     ev = {"type": "agent", "id": a.id}
+    if getattr(a, "remove", False):
+        ev["remove"] = True
+        _event(_session(a.session), ev)
+        return
     for f in ("name", "kind", "model", "role", "status", "current"):
         v = getattr(a, f)
         if v is not None:
@@ -392,7 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = add("blocker", c_blocker, "raise a RED blocker"); p.add_argument("--subject", required=True); p.add_argument("--detail"); p.add_argument("--id"); p.add_argument("--slice"); p.add_argument("--stage")
     p = add("warning", c_warning, "raise an AMBER warning"); p.add_argument("--subject", required=True); p.add_argument("--detail"); p.add_argument("--id"); p.add_argument("--slice"); p.add_argument("--stage")
-    p = add("agent", c_agent, "register/update an agent or subagent"); p.add_argument("id"); p.add_argument("--name"); p.add_argument("--kind"); p.add_argument("--model"); p.add_argument("--role"); p.add_argument("--status", choices=["active", "idle", "done"]); p.add_argument("--current")
+    p = add("agent", c_agent, "register/update an agent or subagent"); p.add_argument("id"); p.add_argument("--name"); p.add_argument("--kind"); p.add_argument("--model"); p.add_argument("--role"); p.add_argument("--status", choices=["active", "idle", "done"]); p.add_argument("--current"); p.add_argument("--remove", action="store_true", help="remove this agent from the panel")
     p = add("meter", c_meter, "add token usage for an agent/model"); p.add_argument("--agent", required=True); p.add_argument("--model", required=True); p.add_argument("--role"); p.add_argument("--tokens-in", dest="tokens_in", type=int); p.add_argument("--tokens-out", dest="tokens_out", type=int)
 
     p = add("md", c_md, "set a markdown stage's content"); p.add_argument("name"); p.add_argument("--kind"); p.add_argument("--title"); p.add_argument("--file"); p.add_argument("--text"); p.add_argument("--activate", action="store_true")

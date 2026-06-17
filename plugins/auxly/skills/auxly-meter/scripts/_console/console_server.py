@@ -284,6 +284,9 @@ class ConsoleState:
 
     def _agent(self, s, ev) -> None:
         aid = str(ev.get("id") or ev.get("name") or f"agent{len(s['agents']) + 1}")
+        if ev.get("remove"):
+            s["agents"] = [a for a in s["agents"] if a["id"] != aid]
+            return
         for a in s["agents"]:
             if a["id"] == aid:
                 for f in ("name", "kind", "model", "role", "status", "current"):
