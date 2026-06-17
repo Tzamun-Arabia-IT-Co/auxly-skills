@@ -134,10 +134,16 @@
     (s.blockers || []).forEach((b) => {
       const open = b.status !== 'resolved';
       const el = document.createElement('div'); el.className = 'notif blocker' + (open ? '' : ' resolved');
-      let h = `<div class="nh"><span class="ntag">🔴 Blocker · action needed</span>${b.slice ? `<span class="nslice">slice ${esc(b.slice)}</span>` : ''}</div><div class="nsubj">${esc(b.subject)}</div>`;
-      if (b.detail) h += `<div class="ndet">${esc(b.detail)}</div>`;
-      if (open) h += `<div class="rrow"><textarea data-b="${esc(b.id)}" placeholder="Your answer / resolution so work can resume…"></textarea><button class="btn resolve" data-b="${esc(b.id)}">Resolve &amp; resume</button></div>`;
-      else h += `<div class="rnote">✓ Resolved${b.resolution ? ': ' + esc(b.resolution) : ''}</div>`;
+      const tag = open ? '🔴 Blocker · action needed' : '✅ Blocker resolved';
+      let h = `<div class="nh"><span class="ntag">${tag}</span>${b.slice ? `<span class="nslice">slice ${esc(b.slice)}</span>` : ''}</div>`;
+      if (open) {
+        h += `<div class="nsubj">${esc(b.subject)}</div>`;
+        if (b.detail) h += `<div class="ndet">${esc(b.detail)}</div>`;
+        h += `<div class="rrow"><textarea data-b="${esc(b.id)}" placeholder="Your answer / resolution so work can resume…"></textarea><button class="btn resolve" data-b="${esc(b.id)}">Resolve &amp; resume</button></div>`;
+      } else {
+        // compact, unmistakably-done record — no red, no "action needed"
+        h += `<div class="rnote">${esc(b.subject)} — resolved${b.resolution ? ': ' + esc(b.resolution) : ''}</div>`;
+      }
       el.innerHTML = h; host.appendChild(el);
     });
     (s.warnings || []).filter((w) => w.status !== 'dismissed').forEach((w) => {
