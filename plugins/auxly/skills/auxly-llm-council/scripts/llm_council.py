@@ -30,6 +30,9 @@ DEFAULT_UI_SESSION_TTL_SEC = 30 * 60
 # (e.g. "gpt-5.2-codex") breaks ChatGPT-account Codex with a 400. Override per
 # member in agents.json if you have API access to a specific model.
 CODEX_MODEL = ""
+# Headroom so an occasional Opus tool_use (despite tools being disabled) doesn't
+# kill the run as error_max_turns before any plan text is produced.
+CLAUDE_MAX_TURNS = 6
 CODEX_REASONING = "xhigh"
 CLAUDE_MODEL = "opus"
 CLAUDE_FAST_MODEL = "sonnet"
@@ -327,13 +330,16 @@ def _build_command_and_input(config: AgentConfig, prompt: str) -> Tuple[List[str
             None,
         )
     if kind == "agy":
-        # Antigravity CLI: print mode emits the response as plain text.
-        # Run unattended (skip permission prompts) so it can read the repo.
-        args = ["agy", "--print", "--dangerously-skip-permissions"]
+        # Antigravity CLI: --print is a STRING flag whose VALUE is the prompt
+        # (--prompt is its alias), not a boolean. So --print must come LAST and
+        # take the prompt directly. Putting it earlier makes it swallow the next
+        # flag as the "prompt" and the real prompt is dropped — agy then replies
+        # with a generic greeting instead of a plan. Other flags go before it.
+        args = ["agy", "--dangerously-skip-permissions"]
         if config.model:
             args.extend(["--model", config.model])
         args.extend(config.extra_args)
-        args.append(prompt)
+        args.extend(["--print", prompt])
         return (args, None)
     if kind == "claude":
         model = config.model or CLAUDE_MODEL
@@ -343,8 +349,13 @@ def _build_command_and_input(config: AgentConfig, prompt: str) -> Tuple[List[str
             "json",
             "--model",
             model,
+            # Tools are disabled below (--tools ""), so the model should answer
+            # in one turn. But Opus sometimes still emits a tool_use block; with
+            # --max-turns 1 that ends the run as error_max_turns with NO plan
+            # text. A small headroom lets the denied tool attempt resolve and the
+            # model produce its final answer on the next turn.
             "--max-turns",
-            "1",
+            str(CLAUDE_MAX_TURNS),
             "--no-session-persistence",
             "--dangerously-skip-permissions",
             "--tools",
