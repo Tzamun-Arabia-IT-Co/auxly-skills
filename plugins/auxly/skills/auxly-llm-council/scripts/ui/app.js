@@ -808,17 +808,41 @@
     }
   };
 
+  // SSE is the primary live channel, but if it ever drops we must not freeze
+  // on the last frame: fall back to polling /api/state, and keep trying to
+  // re-establish the stream. The poll is cleared the moment SSE reconnects.
+  let evtSource = null;
+  let pollTimer = null;
+  let reconnectTimer = null;
+
+  const startPolling = () => {
+    if (pollTimer) return;
+    pollTimer = window.setInterval(fetchState, 3000);
+  };
+  const stopPolling = () => {
+    if (pollTimer) { window.clearInterval(pollTimer); pollTimer = null; }
+  };
+
   const connectEvents = () => {
     if (!window.EventSource) {
-      setConnection('SSE not supported');
+      // No SSE at all — poll only.
+      setConnection('polling');
+      startPolling();
+      fetchState();
       return;
     }
+    try {
+      if (evtSource) { evtSource.close(); }
+    } catch (e) { /* ignore */ }
 
     const source = new EventSource(eventsEndpoint);
+    evtSource = source;
     setConnection('connecting…');
 
     source.onopen = () => {
       setConnection('connected');
+      stopPolling(); // live stream is back — no need to poll
+      if (reconnectTimer) { window.clearTimeout(reconnectTimer); reconnectTimer = null; }
       fetchState();
     };
 
@@ -833,6 +857,13 @@
 
     source.onerror = () => {
       setConnection('reconnecting…');
+      // Keep the panel live via polling while the stream is down…
+      startPolling();
+      // …and rebuild the EventSource (the browser's auto-retry can wedge).
+      try { source.close(); } catch (e) { /* ignore */ }
+      if (!reconnectTimer) {
+        reconnectTimer = window.setTimeout(() => { reconnectTimer = null; connectEvents(); }, 2500);
+      }
     };
   };
 

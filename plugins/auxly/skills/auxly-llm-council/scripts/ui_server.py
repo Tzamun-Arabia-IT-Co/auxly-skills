@@ -79,6 +79,14 @@ class UIServer(ThreadingHTTPServer):
 class _UIRequestHandler(SimpleHTTPRequestHandler):
     server: UIServer
 
+    # Server-Sent Events need a persistent connection. The default HTTP/1.0
+    # has none, so the /events stream closes the instant it opens and the
+    # browser's EventSource reconnects forever (the "reconnecting…" badge).
+    # HTTP/1.1 keeps the socket open; every non-stream response already sends
+    # Content-Length (see _send_json + SimpleHTTPRequestHandler), so keep-alive
+    # is framed correctly.
+    protocol_version = "HTTP/1.1"
+
     def end_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
