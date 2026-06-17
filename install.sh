@@ -32,4 +32,4 @@ done
 echo
 echo "Done. Restart Claude Code (or run /skills) to pick up:"
 echo "  /auxly-llm-council    — multi-model planning council"
-echo "  /auxly-execute-dash   — live execution dashboard"
+echo "  /auxly-execute   — live execution dashboard"

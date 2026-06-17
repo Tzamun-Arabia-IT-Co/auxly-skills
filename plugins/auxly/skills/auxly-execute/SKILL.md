@@ -1,5 +1,5 @@
 ---
-name: auxly-execute-dash
+name: auxly-execute
 description: >
   Execute an accepted implementation plan while showing a live, Auxly-branded HTML dashboard of
   progress — phases, slices, and a progress bar that update in real time as Claude works through

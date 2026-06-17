@@ -158,7 +158,9 @@ def cmd_start(args: argparse.Namespace) -> int:
     log_path = run_dir / "server.log"
 
     # Launch the server detached; it will write session.json and print the URL.
-    server = HERE / "dash_server.py"
+    # The console engine is vendored under _console (single source lives in the
+    # repo at plugins/auxly/shared/console; run sync-console.sh to update).
+    server = HERE / "_console" / "console_server.py"
     with open(log_path, "w") as logf:
         subprocess.Popen(
             [sys.executable, str(server), "--state", str(state_path), "--token", token,
