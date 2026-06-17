@@ -140,11 +140,12 @@ body {
 /* ---------- Task ---------- */
 .task { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.95rem 1.2rem; }
 .eyebrow { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted-2); margin-bottom: 0.4rem; }
-.task-brief { margin: 0; font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; color: var(--ink); }
+.task-brief { margin: 0; font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; color: var(--ink); max-height: min(220px, 26vh); overflow-y: auto; padding-right: 0.5rem; }
 
 /* ---------- Grid + panels ---------- */
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
-.panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px -22px rgba(0,0,0,0.8); transition: border-color .2s ease; }
+.panel:hover { border-color: #303d5a; }
 .panel-wide { grid-column: 1 / -1; }
 .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--border-soft); background: var(--panel-2); }
 .panel-header h2 { margin: 0; font-size: 0.98rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
@@ -153,7 +154,15 @@ body {
 .panel-body { padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.8rem; }
 
 .field-label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-2); }
-.planner-select { width: 100%; padding: 0.55rem 0.7rem; border-radius: 10px; border: 1px solid var(--border); font-size: 0.88rem; background: var(--bg-2); color: var(--ink); }
+.planner-select {
+  width: 100%; padding: 0.55rem 2rem 0.55rem 0.7rem; border-radius: 10px; border: 1px solid var(--border);
+  font-size: 0.88rem; background: var(--bg-2); color: var(--ink); cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: right 1rem center, right 0.75rem center; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  transition: border-color .15s, box-shadow .15s;
+}
+.planner-select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79,147,230,0.18); }
 .detail-meta { display: flex; align-items: center; gap: 0.55rem; }
 .detail-id { font-weight: 700; font-size: 0.92rem; }
 .status-chip { font-size: 0.64rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.22rem 0.55rem; border-radius: 999px; background: var(--raised); color: var(--muted); }
@@ -178,16 +187,47 @@ body {
 .markdown-body hr { border: none; border-top: 1px solid var(--border-soft); margin: 0.8rem 0; }
 .markdown-body a { color: var(--blue); }
 .markdown-body .placeholder { color: var(--muted-2); font-style: italic; }
-.scroll-box { max-height: 540px; overflow-y: auto; padding-right: 0.4rem; }
-.scroll-box::-webkit-scrollbar { width: 9px; }
-.scroll-box::-webkit-scrollbar-thumb { background: var(--raised); border-radius: 6px; }
+/* Bounded, scrollable regions — keep the page from growing without limit.
+   Heights are viewport-relative so they adapt to the window and the inner
+   content scrolls instead of stretching the page. */
+.scroll-box {
+  max-height: min(520px, 52vh);
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  /* subtle top/bottom fade so it reads as "more content above/below" */
+  scroll-behavior: smooth;
+}
+.scroll-box.tall { max-height: min(620px, 62vh); }
+
+/* Branded, thin scrollbars everywhere a region scrolls */
+.scroll-box, .card-body, .task-brief, textarea, .markdown-body pre {
+  scrollbar-width: thin;
+  scrollbar-color: var(--raised) transparent;
+}
+.scroll-box::-webkit-scrollbar,
+.card-body::-webkit-scrollbar,
+.task-brief::-webkit-scrollbar,
+textarea::-webkit-scrollbar { width: 10px; height: 10px; }
+.scroll-box::-webkit-scrollbar-thumb,
+.card-body::-webkit-scrollbar-thumb,
+.task-brief::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb {
+  background: linear-gradient(var(--teal), var(--purple));
+  border-radius: 8px; border: 2px solid var(--panel);
+}
+.scroll-box::-webkit-scrollbar-thumb:hover,
+.card-body::-webkit-scrollbar-thumb:hover { filter: brightness(1.2); }
+.scroll-box::-webkit-scrollbar-track,
+.card-body::-webkit-scrollbar-track { background: transparent; }
 
 /* ---------- Insight cards ---------- */
 .insight-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
 .insight-cards .card.risk { grid-column: 1 / -1; }
 .card { border-radius: 12px; padding: 0.65rem 0.8rem; border: 1px solid var(--border); background: var(--panel-2); }
 .card-title { font-size: 0.66rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.3rem; display: flex; align-items: center; gap: 0.35rem; }
-.card .markdown-body { font-size: 0.82rem; }
+.card .markdown-body { font-size: 0.82rem; max-height: 220px; overflow-y: auto; padding-right: 0.4rem; }
+.card.risk .markdown-body { max-height: 300px; }
+.card:hover { border-color: var(--border); filter: brightness(1.03); }
 .card.risk { background: var(--risk-bg); border-color: var(--risk-bd); }
 .card.risk .card-title { color: var(--risk-ink); }
 .card.pros { background: var(--pro-bg); border-color: var(--pro-bd); }
@@ -202,8 +242,9 @@ body {
 /* ---------- Final plan ---------- */
 .editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
 .editor-pane, .preview-pane { display: flex; flex-direction: column; gap: 0.4rem; }
-textarea#finalPlanEditor { width: 100%; min-height: 380px; resize: vertical; font-family: var(--mono); font-size: 0.8rem; line-height: 1.45; padding: 0.8rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-2); color: var(--ink); }
-#finalPlanPreview { min-height: 380px; }
+textarea#finalPlanEditor { width: 100%; height: min(620px, 62vh); min-height: 320px; max-height: 75vh; resize: vertical; font-family: var(--mono); font-size: 0.8rem; line-height: 1.45; padding: 0.8rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-2); color: var(--ink); }
+textarea#finalPlanEditor:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79,147,230,0.18); }
+#finalPlanPreview { min-height: 320px; height: min(620px, 62vh); max-height: min(620px, 62vh); }
 .action-row { display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: start; margin-top: 0.4rem; }
 .action-group { display: flex; flex-direction: column; gap: 0.45rem; }
 .action-group--actions { flex-direction: row; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
@@ -285,7 +326,7 @@ textarea#finalPlanEditor { width: 100%; min-height: 380px; resize: vertical; fon
               <div id="plannerConsCard" class="card cons empty"><div class="card-title">⚖️ Cons</div><div id="plannerCons" class="markdown-body"></div></div>
             </div>
             <label class="field-label">Full plan</label>
-            <div id="plannerSummaryText" class="markdown-body scroll-box"><span class="placeholder">—</span></div>
+            <div id="plannerSummaryText" class="markdown-body scroll-box tall"><span class="placeholder">—</span></div>
             <ul id="plannerErrors" class="error-list"></ul>
           </div>
         </section>
@@ -303,7 +344,7 @@ textarea#finalPlanEditor { width: 100%; min-height: 380px; resize: vertical; fon
               <div id="judgeConsCard" class="card cons empty"><div class="card-title">⚖️ Cons</div><div id="judgeCons" class="markdown-body"></div></div>
             </div>
             <label class="field-label">Full report</label>
-            <div id="judgeSummary" class="markdown-body scroll-box"><span class="placeholder">—</span></div>
+            <div id="judgeSummary" class="markdown-body scroll-box tall"><span class="placeholder">—</span></div>
             <ul id="judgeErrors" class="error-list"></ul>
           </div>
         </section>
