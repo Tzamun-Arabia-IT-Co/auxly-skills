@@ -73,35 +73,49 @@
     });
   };
 
-  const INTENTS = {
-    plan: [['Execute ▶', 'start_execute']],
-    execute: [['Run checks ▶', 'start_verify'], ['Review ▶', 'start_review']],
-    verify: [['Review ▶', 'start_review']],
-    review: [['Re-run review ▶', 'start_review']],
+  // Single linear flow: one "Next" button that advances to the next step.
+  // intent = the signal the worker agent picks up to start that step.
+  const FLOW = ['plan', 'execute', 'verify', 'review'];
+  const STEP_INTENT = { execute: 'start_execute', verify: 'start_verify', review: 'start_review' };
+  const STEP_VERB = { execute: 'execute', verify: 'verify', review: 'review' };
+  // Is the current stage finished (ready to advance)?
+  const stageDone = (st) => {
+    if (!st) return false;
+    if (st.status === 'done' || st.status === 'complete') return true;
+    if (st.kind === 'execute') { const pr = (st.data || {}).progress || {}; return pr.total > 0 && pr.pct >= 100; }
+    if (st.kind === 'verify') { const c = (st.data || {}).checks || []; return c.length > 0 && c.every((x) => ['pass', 'skip'].includes(x.status)); }
+    return false;
   };
-  // Which stage each intent advances to — so the button visibly moves the user
-  // to that tab immediately (the agent picks up the queued intent to do the work).
-  const INTENT_TARGET = { start_execute: 'execute', start_verify: 'verify', start_review: 'review' };
   const renderActions = (s) => {
     const host = byId('actions'); host.innerHTML = '';
     const st = s.stages[selected]; if (!st) return;
-    (INTENTS[st.kind] || []).forEach(([label, name]) => {
-      const b = document.createElement('button'); b.className = 'btn primary'; b.textContent = label;
-      b.addEventListener('click', () => {
-        post('/api/intent', { kind: 'intent', name });
-        // immediate feedback + jump to the target stage so it never feels dead
-        const target = INTENT_TARGET[name];
-        if (target && state && state.stages && state.stages[target]) {
-          selected = target; userPicked = true; render(state);
-          toast(`${label.replace(/[▶\s]+$/, '')} — agent starting…`);
-        } else {
-          b.textContent = 'requested ✓';
-          setTimeout(() => { b.textContent = label; }, 1600);
-          toast(`${label.replace(/[▶\s]+$/, '')} requested`);
-        }
-      });
-      host.appendChild(b);
+    const idx = FLOW.indexOf(st.kind);
+    const nextKind = idx >= 0 ? FLOW.slice(idx + 1).find((k) => s.stages[k]) : null;
+
+    if (!nextKind) {
+      // last step — show completion, no Next
+      if (stageDone(st)) { const m = document.createElement('span'); m.className = 'flow-msg ok'; m.textContent = '✓ All steps complete'; host.appendChild(m); }
+      return;
+    }
+    const nextTitle = (s.stages[nextKind].title) || nextKind;
+    const ready = stageDone(st);
+
+    if (ready) {
+      const m = document.createElement('span'); m.className = 'flow-msg ok';
+      m.textContent = `✓ ${st.title || st.name} complete — click Next to ${STEP_VERB[nextKind] || nextKind}`;
+      host.appendChild(m);
+    }
+    const b = document.createElement('button');
+    b.className = 'btn primary next' + (ready ? ' ready' : '');
+    b.textContent = `Next: ${nextTitle} ▶`;
+    if (!ready) b.title = `${st.title || st.name} still in progress — you can jump ahead, or wait until it's done`;
+    b.addEventListener('click', () => {
+      const name = STEP_INTENT[nextKind];
+      if (name) post('/api/intent', { kind: 'intent', name });
+      selected = nextKind; userPicked = true; render(state);
+      toast(`Moving to ${nextTitle} — agent starting…`);
     });
+    host.appendChild(b);
   };
 
   // Always-visible blockers/warnings count so the user knows the state at a

@@ -186,6 +186,13 @@ mark{background:rgba(245,200,105,.4);color:#fff;border-radius:3px;padding:0 2px;
 .toast.show{opacity:1;transform:none;}
 .toast::before{content:'';width:4px;align-self:stretch;border-radius:3px;background:var(--blue);flex:none;}
 .toast.success::before{background:var(--green);}.toast.error::before{background:var(--risk-ink);}
+/* single Next button + completion message */
+.actions{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;}
+.flow-msg{font-size:.8rem;font-weight:600;}
+.flow-msg.ok{color:var(--green,#2dd4a7);}
+.btn.next.ready{animation:nextpulse 1.2s ease-in-out infinite;box-shadow:0 0 0 0 rgba(45,212,167,.55);}
+.btn.next:not(.ready){opacity:.85;}
+@keyframes nextpulse{0%{box-shadow:0 0 0 0 rgba(45,212,167,.55);}70%{box-shadow:0 0 0 10px rgba(45,212,167,0);}100%{box-shadow:0 0 0 0 rgba(45,212,167,0);}}
 /* always-visible blockers / warnings status */
 .hrow{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;justify-content:space-between;}
 .status-pills{display:flex;gap:.5rem;flex-wrap:wrap;}
