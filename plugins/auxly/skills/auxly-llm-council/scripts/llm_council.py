@@ -969,8 +969,12 @@ def build_claude_persona_council() -> Dict[str, Any]:
         },
         {
             "name": "council-pragmatist",
+            # Use the same known-good default model as the other personas. The
+            # bias-resistance comes from the distinct system prompts below, not
+            # from mixing model tiers — and a faster tier (e.g. sonnet) that an
+            # account can't serve would just hang and time out every run.
             "kind": "claude",
-            "model": CLAUDE_FAST_MODEL,
+            "model": CLAUDE_MODEL,
             "extra_args": persona(
                 "You are a shipping-focused pragmatist. Prefer the simplest plan that "
                 "actually works, fast iteration, minimal moving parts, and quick wins. "
