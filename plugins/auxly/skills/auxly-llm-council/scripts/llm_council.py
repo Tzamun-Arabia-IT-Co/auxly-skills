@@ -1357,7 +1357,10 @@ def run_planners(
                 error=err,
             )
             results.append(result)
-            if not valid and attempt < RETRY_LIMIT:
+            # Retry only structural/validation failures — those often pass on a
+            # second try. A timeout almost never recovers and would otherwise burn
+            # another full --timeout window per attempt, so fail it fast instead.
+            if not valid and timeout_error is None and attempt < RETRY_LIMIT:
                 retry_timestamp = _ui_timestamp()
                 _ui_upsert_planner(
                     ui_state,
