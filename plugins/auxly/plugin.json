@@ -3,6 +3,6 @@
   "description": "Auxly Council (multi-model bias-resistant planning with a branded, embedded live UI) + Auxly Execute Dashboard (execute an accepted plan with a live phase/slice progress, blocker, warning, and agent/subagent dashboard). Pure Python stdlib + browser; no external dependencies.",
   "version": "1.0.0",
   "author": { "name": "Auxly" },
-  "homepage": "https://github.com/waeils/auxly-skills",
+  "homepage": "https://github.com/Tzamun-Arabia-IT-Co/auxly-skills",
   "keywords": ["planning", "council", "multi-agent", "llm", "dashboard", "execution", "auxly"]
 }

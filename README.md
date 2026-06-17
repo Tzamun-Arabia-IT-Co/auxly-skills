@@ -1,8 +1,15 @@
 <div align="center">
-  <img src="plugins/auxly/skills/auxly-llm-council/scripts/ui/assets/auxly-logo.png" width="96" alt="Auxly" />
+  <img src="assets/auxly-banner.png" width="460" alt="Auxly — by Tzamun" />
   <h1>Auxly Skills</h1>
   <p><b>Plan → execute → verify → review → recap — in one shared, live, dark Console.</b><br/>
   Six Claude Code skills that chain together — or each work on their own.</p>
+
+  <p>
+    <img alt="Python" src="https://img.shields.io/badge/python-3.8%2B-4f93e6?style=flat-square" />
+    <img alt="deps" src="https://img.shields.io/badge/dependencies-stdlib%20only-2dd4a7?style=flat-square" />
+    <img alt="license" src="https://img.shields.io/badge/license-MIT-8b6fd0?style=flat-square" />
+    <img alt="Claude Code" src="https://img.shields.io/badge/Claude%20Code-plugin-29c2cf?style=flat-square" />
+  </p>
 </div>
 
 ---
@@ -31,13 +38,13 @@ picks up, so one tab drives the whole flow while every skill stays independently
 
 ### Option A — Claude Code plugin marketplace (recommended)
 ```
-/plugin marketplace add waeils/auxly-skills
+/plugin marketplace add Tzamun-Arabia-IT-Co/auxly-skills
 /plugin install auxly@auxly
 ```
 
 ### Option B — standalone installer
 ```bash
-git clone https://github.com/waeils/auxly-skills.git
+git clone https://github.com/Tzamun-Arabia-IT-Co/auxly-skills.git
 cd auxly-skills
 ./install.sh           # symlinks into ~/.claude/skills (use --copy to copy)
 ```
