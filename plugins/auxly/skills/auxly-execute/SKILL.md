@@ -18,8 +18,14 @@ Execute an accepted plan and give the user a live window into it: which phase/sl
 progress, the agents at work, build/test checks, and any blockers or warnings — all in the **shared
 Auxly Console** (one server, one browser tab, stage tabs: Plan ▸ Execute ▸ Verify ▸ Review).
 
-**Execution model:** Claude is the executor. Claude works the plan with its own tools and pushes
-progress events to the console via `console.py`. Nothing runs shell commands unattended.
+**Execution model:** Claude is the single executor/orchestrator. Claude works the plan with its own
+tools and pushes progress events to the console via `console.py`. Nothing runs shell commands
+unattended. The **Agents & Models** rows (Engineer / Reviewer / Tester + their models) are *assignment
+labels* the orchestrator reflects status onto — they are **not** separate CLIs that get spawned or
+"notified" to take turns. There is no automatic role→role hand-off (e.g. codex implements → claude is
+notified to review → gemini tests); the orchestrator does each part itself and updates the matching
+row. If review surfaces findings, the orchestrator fixes them — it does not dispatch them back to a
+per-role CLI. (Real per-role CLI dispatch is a deliberate non-goal of this skill.)
 
 All commands use the vendored console CLI: `python3 scripts/_console/console.py <verb>`.
 
