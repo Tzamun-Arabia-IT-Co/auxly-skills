@@ -112,6 +112,17 @@ Supported `kind` values: `codex`, `claude`, `gemini`, `agy`, `opencode`, `custom
   `## Risks`) sections so this is reliable.
 - Failed agents show a humanized "Agent did not return a plan. Reported: …" message instead of a raw
   JSON event stream.
+- **Interactive controls:** a phase stepper (Planning → Judging → Ready), per-member "working" tickers,
+  in-plan search (`/`), collapsible plan sections, copy buttons, a drag-resizable editor/preview split,
+  toast notifications, and keyboard shortcuts (`⌘/Ctrl+Enter` execute, `⌘/Ctrl+S` save, `←/→` switch
+  member, `⌘/Ctrl+Enter` in the refine box = refine).
+- **Implementation Crew & Workload panel:** shows the parsed workload (phases / tasks / risks / words)
+  and an **editable crew** — which agent + model is hired for each role (Engineer / Reviewer / Tester,
+  add/remove your own). Edit it *before* executing.
+- **Execute handoff:** the green **▶ Execute** button (formerly "Accept") writes `final-plan-accepted.md`,
+  plus `execution-config.json` (the chosen crew + workload) and an `EXECUTE-REQUESTED` marker into the
+  run folder, then closes the UI. The next stage — `/auxly-execute` — should read `execution-config.json`
+  and assign each role to the agent/model the user picked.
 
 ## References
 - Architecture and data flow: `references/architecture.md`

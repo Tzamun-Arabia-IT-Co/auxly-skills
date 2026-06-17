@@ -25,6 +25,19 @@ All commands use the vendored console CLI: `python3 scripts/_console/console.py 
 
 ## Workflow
 
+### 0. Pick up the council handoff (if present)
+When the user reached you by pressing **▶ Execute** in `/auxly-llm-council`, the council run folder
+(`./auxly-council/runs/<ts>/`) contains:
+- `final-plan-accepted.md` — the plan to execute (use this as `--plan`).
+- `execution-config.json` — `{ "crew": [{role, agent, model}], "workload": {...} }`. **Read it** and
+  assign each phase/slice's work to the agent + model the user chose for that role (e.g. Engineer →
+  codex, Reviewer → claude). Register them with `console.py agent <name> --model <m> --status idle/active`
+  so the Agents & Models panel reflects the chosen crew. Honor the user's picks — they edited this on
+  purpose before executing.
+- `EXECUTE-REQUESTED` — a one-line marker pointing at the accepted plan.
+
+If there is no handoff (standalone use), just take the plan path the user gives you.
+
 ### 1. Open the console with the plan
 ```bash
 python3 scripts/_console/console.py start --plan /path/to/final-plan.md --title "DB migration"

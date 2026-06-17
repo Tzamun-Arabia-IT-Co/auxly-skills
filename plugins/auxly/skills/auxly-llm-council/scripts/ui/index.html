@@ -255,8 +255,88 @@ textarea#finalPlanEditor:focus { outline: none; border-color: var(--blue); box-s
 .btn.primary { background: var(--grad); }
 .btn.danger { background: linear-gradient(120deg, #f5b454, #e07a5f); align-self: stretch; color:#2a1404; }
 .btn:hover { filter: brightness(1.08); }
+.btn.ghost { background: var(--panel-2); border: 1px solid var(--border); color: var(--ink); }
+.btn.success { background: linear-gradient(120deg, var(--green), var(--teal)); color:#04231a; }
+.btn.sm { font-size: 0.74rem; padding: 0.4rem 0.7rem; }
+
+/* ---------- Phase stepper ---------- */
+.stepper { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.stepper .step { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.74rem; color: var(--muted-2); }
+.stepper .bead {
+  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 0.66rem; font-weight: 800; background: var(--raised); color: var(--muted-2);
+  border: 1px solid var(--border); transition: all .25s;
+}
+.stepper .step.active .bead { background: var(--grad); color: #041220; border-color: transparent; box-shadow: 0 0 12px rgba(79,147,230,.5); animation: beadpulse 1.4s ease-in-out infinite; }
+.stepper .step.done .bead { background: var(--green); color: #04231a; border-color: transparent; }
+.stepper .step.active .slabel, .stepper .step.done .slabel { color: var(--ink); }
+.stepper .bar { width: 26px; height: 2px; background: var(--border); border-radius: 2px; }
+.stepper .step.done + .bar, .stepper .bar.filled { background: var(--green); }
+@keyframes beadpulse { 0%,100% { box-shadow: 0 0 12px rgba(79,147,230,.5);} 50% { box-shadow: 0 0 3px rgba(79,147,230,.25);} }
+
+/* ---------- Working ticker ---------- */
+.ticker { display: none; align-items: center; gap: 0.5rem; font-size: 0.76rem; color: var(--blue); }
+.ticker.on { display: inline-flex; }
+.ticker .spinner { width: 13px; height: 13px; border-radius: 50%; border: 2px solid rgba(79,147,230,.3); border-top-color: var(--blue); animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Crew & workload ---------- */
+.workload-chips { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.wchip { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.8rem; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border); }
+.wchip .wnum { font-size: 1.15rem; font-weight: 800; background: var(--grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.wchip .wlabel { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.crew-table { display: flex; flex-direction: column; gap: 0.55rem; }
+.crew-row { display: grid; grid-template-columns: 1.1fr 1fr 1.2fr auto; gap: 0.6rem; align-items: center; background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 0.55rem 0.7rem; }
+.crew-row input, .crew-row select { background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); border-radius: 8px; padding: 0.42rem 0.55rem; font-size: 0.82rem; font-family: var(--font); width: 100%; }
+.crew-row input:focus, .crew-row select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79,147,230,.16); }
+.crew-row .crew-role input { font-weight: 700; }
+.crew-row .rm { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; cursor: pointer; padding: 0.35rem 0.55rem; font-size: 0.9rem; line-height: 1; }
+.crew-row .rm:hover { color: var(--risk-ink); border-color: var(--risk-bd); }
+.crew-head { display: grid; grid-template-columns: 1.1fr 1fr 1.2fr auto; gap: 0.6rem; padding: 0 0.7rem; font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted-2); }
+
+/* ---------- Plan toolbar ---------- */
+.plan-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.plan-search { flex: 1; min-width: 140px; background: var(--bg-2); border: 1px solid var(--border); color: var(--ink); border-radius: 8px; padding: 0.4rem 0.6rem; font-size: 0.8rem; }
+.plan-search:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(79,147,230,.16); }
+mark { background: rgba(245,200,105,.4); color: #fff; border-radius: 3px; padding: 0 2px; }
+.copy-btn { cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); border-radius: 7px; font-size: 0.68rem; padding: 0.16rem 0.45rem; transition: all .15s; }
+.copy-btn:hover { color: var(--teal); border-color: var(--teal); }
+.copy-btn.ok { color: var(--green); border-color: var(--pro-bd); }
+.markdown-body pre { position: relative; }
+.markdown-body pre .copy-btn { position: absolute; top: 6px; right: 6px; }
+/* collapsible plan sections */
+.md-section > h2 { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 0.4rem; }
+.md-section > h2::after { content: '▾'; font-size: 0.7rem; color: var(--muted-2); margin-left: auto; transition: transform .2s; }
+.md-section.collapsed > h2::after { transform: rotate(-90deg); }
+.md-section.collapsed > :not(h2) { display: none; }
+
+/* ---------- Drag-resize split ---------- */
+.editor-grid.resizable { grid-template-columns: var(--split, 1fr) 6px 1fr; }
+.split-handle { cursor: col-resize; align-self: stretch; border-radius: 3px; background: var(--border); transition: background .15s; }
+.split-handle:hover, .split-handle.drag { background: var(--grad); }
+
+/* ---------- Toasts ---------- */
+.toast-wrap { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 0.5rem; z-index: 50; }
+.toast {
+  min-width: 220px; max-width: 360px; padding: 0.7rem 0.9rem; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--panel-2); color: var(--ink); font-size: 0.82rem; box-shadow: 0 14px 40px -16px rgba(0,0,0,.8);
+  display: flex; align-items: flex-start; gap: 0.55rem; opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s;
+}
+.toast.show { opacity: 1; transform: none; }
+.toast::before { content: ''; width: 4px; align-self: stretch; border-radius: 3px; background: var(--blue); flex: none; }
+.toast.success::before { background: var(--green); }
+.toast.error::before { background: var(--risk-ink); }
+.toast.warn::before { background: var(--con-ink); }
+.toast .t-body b { display: block; margin-bottom: 1px; }
+.toast .t-body span { color: var(--muted); }
+
+/* keyboard hint */
+.kbd { font-family: var(--mono); font-size: 0.66rem; background: var(--raised); border: 1px solid var(--border); border-radius: 5px; padding: 0 4px; color: var(--muted); }
 
 @media (max-width: 920px) {
+  .editor-grid.resizable { grid-template-columns: 1fr; }
+  .split-handle { display: none; }
+  .crew-row, .crew-head { grid-template-columns: 1fr 1fr; }
   .grid, .editor-grid, .insight-cards { grid-template-columns: 1fr; }
   .insight-cards .card.risk { grid-column: auto; }
   .action-row { grid-template-columns: 1fr; }
@@ -299,6 +379,7 @@ textarea#finalPlanEditor:focus { outline: none; border-color: var(--blue); box-s
           <span id="councilMode" class="mode-badge" data-mode=""></span>
           <span id="councilRoster" style="display:contents"></span>
         </div>
+        <div id="stepper" class="stepper"></div>
       </header>
 
       <section class="task">
@@ -311,7 +392,10 @@ textarea#finalPlanEditor:focus { outline: none; border-color: var(--blue); box-s
         <section class="panel">
           <div class="panel-header">
             <h2>Council Member Output</h2>
-            <span id="plannerSummary" class="panel-sub">—</span>
+            <div style="display:flex;align-items:center;gap:0.7rem">
+              <span id="plannerTicker" class="ticker"><span class="spinner"></span><span id="plannerTickerText">working…</span></span>
+              <span id="plannerSummary" class="panel-sub">—</span>
+            </div>
           </div>
           <div class="panel-body">
             <label class="field-label" for="plannerSelect">Council member</label>
@@ -335,7 +419,10 @@ textarea#finalPlanEditor:focus { outline: none; border-color: var(--blue); box-s
         <section class="panel">
           <div class="panel-header">
             <h2>Judge Output</h2>
-            <span id="judgeStatus" class="panel-sub">—</span>
+            <div style="display:flex;align-items:center;gap:0.7rem">
+              <span id="judgeTicker" class="ticker"><span class="spinner"></span><span id="judgeTickerText">judging…</span></span>
+              <span id="judgeStatus" class="panel-sub">—</span>
+            </div>
           </div>
           <div class="panel-body">
             <div class="insight-cards">
@@ -349,6 +436,26 @@ textarea#finalPlanEditor:focus { outline: none; border-color: var(--blue); box-s
           </div>
         </section>
 
+        <!-- Implementation crew & workload -->
+        <section class="panel panel-wide">
+          <div class="panel-header">
+            <h2>Implementation Crew &amp; Workload</h2>
+            <span class="panel-sub">who gets hired to build this — edit before you execute</span>
+          </div>
+          <div class="panel-body">
+            <div id="workloadChips" class="workload-chips"></div>
+            <label class="field-label">Crew · role → agent → model</label>
+            <div class="crew-head">
+              <span>Role</span><span>Agent</span><span>Model</span><span></span>
+            </div>
+            <div id="crewTable" class="crew-table"></div>
+            <div>
+              <button id="addCrewBtn" class="btn ghost sm" type="button">+ Add role</button>
+              <span id="crewStatus" class="status-text"></span>
+            </div>
+          </div>
+        </section>
+
         <!-- Final plan -->
         <section class="panel panel-wide">
           <div class="panel-header">
@@ -356,11 +463,17 @@ textarea#finalPlanEditor:focus { outline: none; border-color: var(--blue); box-s
             <span id="finalPlanStatus" class="panel-sub">—</span>
           </div>
           <div class="panel-body">
-            <div class="editor-grid">
+            <div class="plan-toolbar">
+              <input id="planSearch" class="plan-search" type="search" placeholder="Search in plan…  ( / )" />
+              <button id="collapseAllBtn" class="btn ghost sm" type="button">Collapse all</button>
+              <button id="copyPlanBtn" class="btn ghost sm" type="button">Copy plan</button>
+            </div>
+            <div class="editor-grid resizable" id="editorGrid">
               <div class="editor-pane">
                 <label class="field-label" for="finalPlanEditor">Editor</label>
                 <textarea id="finalPlanEditor" spellcheck="false"></textarea>
               </div>
+              <div class="split-handle" id="splitHandle" title="Drag to resize"></div>
               <div class="preview-pane" id="previewPane">
                 <label class="field-label">Preview</label>
                 <div id="finalPlanPreview" class="markdown-body scroll-box"><span class="placeholder">—</span></div>
@@ -368,15 +481,15 @@ textarea#finalPlanEditor:focus { outline: none; border-color: var(--blue); box-s
             </div>
             <div class="action-row">
               <div class="action-group action-group--actions">
-                <button id="acceptBtn" class="btn primary" type="button">Accept</button>
-                <button id="saveBtn" class="btn primary" type="button">Save</button>
+                <button id="executeBtn" class="btn success" type="button" title="Accept plan + crew and hand off to /auxly-execute (⌘↵)">▶ Execute</button>
+                <button id="saveBtn" class="btn primary" type="button" title="Save a copy (⌘S)">Save</button>
                 <span id="saveStatus" class="status-text"></span>
               </div>
               <div class="action-group">
                 <label class="field-label" for="refineContext">Refine Notes</label>
                 <div class="rerun-row">
                   <textarea id="refineContext" rows="3" placeholder="Describe what to refine in the plan"></textarea>
-                  <button id="refineBtn" class="btn danger" type="button">Refine</button>
+                  <button id="refineBtn" class="btn danger" type="button" title="Ask the judge to refine (⌘⏎ in this box)">Refine</button>
                 </div>
                 <span id="refineStatus" class="status-text"></span>
               </div>
@@ -385,6 +498,8 @@ textarea#finalPlanEditor:focus { outline: none; border-color: var(--blue); box-s
         </section>
       </main>
     </div>
+
+    <div id="toastWrap" class="toast-wrap"></div>
 
     <script src="logo.js"></script>
     <script src="app.js"></script>

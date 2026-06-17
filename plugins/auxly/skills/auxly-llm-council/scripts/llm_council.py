@@ -836,18 +836,41 @@ def _handle_ui_actions(
                     _ui_timestamp(),
                 )
                 continue
-            if path == "/api/accept":
+            if path in ("/api/accept", "/api/execute"):
                 final_plan = _coerce_text(payload.get("final_plan"))
                 accept_path = run_dir / "final-plan-accepted.md"
                 accept_path.write_text(final_plan, encoding="utf-8")
                 final_path = run_dir / "final-plan.md"
                 final_path.write_text(final_plan, encoding="utf-8")
                 _ui_set_final_plan(ui_state, ui_instance, final_plan, _ui_timestamp())
+                # Persist the chosen implementation crew + workload so the next
+                # stage (/auxly-execute) can pick up exactly who was hired for
+                # which role, plus a machine-readable handoff marker.
+                crew = payload.get("crew") if isinstance(payload.get("crew"), list) else []
+                workload = payload.get("workload") if isinstance(payload.get("workload"), dict) else {}
+                exec_config = {
+                    "accepted_plan": "final-plan-accepted.md",
+                    "crew": crew,
+                    "workload": workload,
+                    "accepted_at": _ui_timestamp(),
+                }
+                try:
+                    (run_dir / "execution-config.json").write_text(
+                        json.dumps(exec_config, indent=2), encoding="utf-8"
+                    )
+                    (run_dir / "EXECUTE-REQUESTED").write_text(
+                        f"Run /auxly-execute on {accept_path.resolve()}\n", encoding="utf-8"
+                    )
+                except OSError:
+                    pass
+                is_execute = path == "/api/execute"
                 _ui_action_result(
                     ui_instance,
-                    "accept",
-                    "accepted",
-                    "accepted plan and closing UI",
+                    "execute" if is_execute else "accept",
+                    "executing" if is_execute else "accepted",
+                    "Plan accepted — crew saved. Hand off to /auxly-execute."
+                    if is_execute
+                    else "accepted plan and closing UI",
                     None,
                     _ui_timestamp(),
                 )
