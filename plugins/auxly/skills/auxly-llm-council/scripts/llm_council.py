@@ -26,7 +26,10 @@ DEFAULT_TIMEOUT_SEC = 600
 DEFAULT_UI_KEEPALIVE_SEC = 20 * 60
 DEFAULT_UI_SESSION_TTL_SEC = 30 * 60
 
-CODEX_MODEL = "gpt-5.2-codex"
+# Empty = let Codex use the account's default model. Pinning an API-only name
+# (e.g. "gpt-5.2-codex") breaks ChatGPT-account Codex with a 400. Override per
+# member in agents.json if you have API access to a specific model.
+CODEX_MODEL = ""
 CODEX_REASONING = "xhigh"
 CLAUDE_MODEL = "opus"
 CLAUDE_FAST_MODEL = "sonnet"
@@ -298,11 +301,14 @@ def _build_command_and_input(config: AgentConfig, prompt: str) -> Tuple[List[str
             "exec",
             "--json",
             "--skip-git-repo-check",
-            "-m",
-            model,
-            "-c",
-            f"model_reasoning_effort={reasoning}",
         ]
+        # Only pin a model when one is explicitly set. ChatGPT-account Codex
+        # rejects API-only model names (e.g. gpt-5.2-codex); omitting -m lets it
+        # use the account's default model, which works on every Codex auth type.
+        if model:
+            args.extend(["-m", model])
+        if reasoning:
+            args.extend(["-c", f"model_reasoning_effort={reasoning}"])
         args.extend(config.extra_args)
         args.append(prompt)
         return (
