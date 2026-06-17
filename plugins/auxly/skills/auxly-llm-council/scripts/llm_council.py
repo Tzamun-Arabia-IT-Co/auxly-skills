@@ -358,8 +358,15 @@ def _build_command_and_input(config: AgentConfig, prompt: str) -> Tuple[List[str
             str(CLAUDE_MAX_TURNS),
             "--no-session-persistence",
             "--dangerously-skip-permissions",
+            # --tools "" only disables BUILT-IN tools; MCP tools stay available.
+            # A spawned planner inherits the user's MCP servers (auxly-memory,
+            # etc.) and project CLAUDE.md, so Opus tries an MCP tool_use and the
+            # run dies at max-turns with no plan. --strict-mcp-config with no
+            # --mcp-config strips every MCP server, so the planner answers in one
+            # turn from knowledge — which is exactly what we want for planning.
             "--tools",
             "",
+            "--strict-mcp-config",
             "--disable-slash-commands",
         ]
         args.extend(config.extra_args)
