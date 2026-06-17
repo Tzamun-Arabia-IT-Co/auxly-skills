@@ -774,11 +774,31 @@ def _rebuild_ui_state_from_run(run_dir: Path) -> Dict[str, Any]:
         )
     judge_path = run_dir / "judge.md"
     final_path = run_dir / "final-plan.md"
+    # Infer each member's kind from its id so the roster + crew dropdowns
+    # repopulate on a reopened run (e.g. "claude-opus" -> claude).
+    def _infer_kind(member_id: str) -> str:
+        low = member_id.lower()
+        for kind in ("codex", "claude", "gemini", "agy", "opencode"):
+            if kind in low:
+                return kind
+        return "custom"
+    council = [
+        {"id": p["id"], "kind": _infer_kind(p["id"]), "model": "", "role": "planner"}
+        for p in planners
+    ]
+    council.append({"id": "judge", "kind": "claude", "model": "", "role": "judge"})
+    council_mode = (
+        "claude-only"
+        if planners and all(_infer_kind(p["id"]) == "claude" for p in planners)
+        else ("multi-vendor" if planners else "")
+    )
     return {
         "run_id": run_dir.name,
         "task_brief": "",
         "phase": "complete",
         "planners": planners,
+        "council": council,
+        "council_mode": council_mode,
         "judge": {
             "status": "complete" if judge_path.exists() else "unknown",
             "summary": load_text(str(judge_path)) if judge_path.exists() else "",
