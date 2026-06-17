@@ -36,19 +36,48 @@ picks up, so one tab drives the whole flow while every skill stays independently
 
 ## Install
 
-### Option A — Claude Code plugin marketplace (recommended)
-```
+### Option A — Claude Code plugin marketplace (recommended for Claude Code)
+```text
 /plugin marketplace add Tzamun-Arabia-IT-Co/auxly-skills
 /plugin install auxly@auxly
 ```
+**What this does:** `marketplace add` registers this repo as a plugin source (it reads
+`.claude-plugin/marketplace.json`). `install auxly@auxly` installs the **`auxly`** plugin from it,
+which bundles all six skills under `plugins/auxly/skills/`. They appear immediately as
+`/auxly-llm-council`, `/auxly-execute`, … — update later with `/plugin update auxly@auxly`. No clone,
+no PATH changes.
 
-### Option B — standalone installer
+### Option B — install into ALL your agent CLIs (one command)
+The same skills also run in other agent tools. Clone and run the installer:
 ```bash
-git clone https://github.com/Tzamun-Arabia-IT-Co/auxly-skills.git
-cd auxly-skills
-./install.sh           # symlinks into ~/.claude/skills (use --copy to copy)
+git clone https://github.com/Tzamun-Arabia-IT-Co/auxly-skills.git ~/auxly-skills
+cd ~/auxly-skills
+./install.sh                 # detect every supported tool and wire it up
+./install.sh --dry-run       # preview first (changes nothing)
+./install.sh --claude-only   # just Claude Code
+./install.sh --uninstall     # cleanly remove everything it added
 ```
-Then restart Claude Code. You'll have all six `/auxly-*` skills.
+
+**Supported tools & how they integrate** (auto-detected — only installed ones are touched):
+
+| Tool | Integration | How you invoke |
+|---|---|---|
+| **Claude Code** | native skill → `~/.claude/skills` | `/auxly-llm-council`, `/auxly-execute`, … |
+| **OpenCode** | native skill → `~/.config/opencode/skills` | `/auxly-…` |
+| **Qwen Code** | native skill → `~/.qwen/skills` | `/auxly-…` |
+| **Kimi** | native skill → `~/.kimi/skills` | `/auxly-…` |
+| **Codex** | adapter block → `~/.codex/AGENTS.md` | plain language: "run the auxly council" |
+| **Gemini CLI** | adapter block → `~/.gemini/GEMINI.md` | plain language |
+| **Antigravity (agy)** | adapter block → `~/.antigravity/AGENTS.md` | plain language |
+| **Cursor** | adapter block → `~/.cursor/AGENTS.md` | plain language |
+
+*Skills* (SKILL.md) are a Claude-Code-style format that OpenCode/Qwen/Kimi also read, so those four
+get native `/auxly-…` commands. The others read a global instructions file, so the installer injects a
+small, delimited, reversible **Auxly block** there that points at the shared Python CLI (see
+[`AGENTS.md`](AGENTS.md)) — drive them by just asking. The engine is identical everywhere
+(Python 3 stdlib + a browser); nothing is duplicated per tool except a symlink.
+
+Restart a tool after installing so it rescans. Re-run `./install.sh` any time to update.
 
 ## Quick start
 
@@ -62,6 +91,34 @@ Then restart Claude Code. You'll have all six `/auxly-*` skills.
 
 Each is standalone — start anywhere. The Console's **Execute ▶ / Review ▶** buttons hand off to the
 next skill in the same tab.
+
+## Usage
+
+You normally just **ask** — e.g. "plan this change with the council", "execute the plan with the
+dashboard", "review my diff". The skill triggers, opens the Console in your browser, and reports back
+in chat. The Console is one tab with stage tabs (Plan ▸ Execute ▸ Verify ▸ Review ▸ Runs ▸ Summary).
+
+- **Plan** — `/auxly-llm-council`: answer a few intake questions; it runs the council and writes
+  `final-plan.md`. Have `codex` / `gemini` / `agy` installed for a multi-vendor council; otherwise it
+  uses a Claude-only persona council automatically.
+- **Execute** — `/auxly-execute`: point it at the `final-plan.md`. Watch phases/slices tick, agents go
+  active/idle, and checks pass/fail. If it hits a **🔴 blocker**, type your answer in the red card and
+  click **Resolve & resume** — execution continues. **🟡 warnings** are FYI; dismiss them.
+- **Review** — `/auxly-review`: reviews the diff from several angles; skeptics refute weak findings;
+  survivors show with severity + `file:line` + verdict.
+- **Meter / Digest / Board** — `/auxly-meter` (token & ≈cost in the header), `/auxly-digest` (a
+  Markdown recap + `digest.md`), `/auxly-board` (a grid of every run).
+
+**Power users — drive it directly from any tool:**
+```bash
+CON=~/auxly-skills/plugins/auxly/shared/console/console.py
+python3 "$CON" start --plan ./final-plan.md --title "My change"   # opens the Console
+python3 "$CON" slice 1.1 --status done --note "did it"
+python3 "$CON" blocker --id k --subject "need a secret"
+python3 "$CON" --help                                             # every verb
+```
+
+Runs are saved under `./auxly-console/runs/<timestamp>/` in the working directory.
 
 ## Requirements
 - Claude Code
