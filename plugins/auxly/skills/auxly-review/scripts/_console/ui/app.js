@@ -38,6 +38,14 @@
 
   let state = null, selected = null, userPicked = false;
 
+  const toast = (msg, tone) => {
+    let wrap = byId('toastWrap');
+    if (!wrap) { wrap = document.createElement('div'); wrap.id = 'toastWrap'; wrap.className = 'toast-wrap'; document.body.appendChild(wrap); }
+    const el = document.createElement('div'); el.className = 'toast' + (tone ? ' ' + tone : ''); el.textContent = msg;
+    wrap.appendChild(el); requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }, 3600);
+  };
+
   const setConn = (ok, label) => { const c = byId('conn'); c.dataset.ok = ok ? '1' : '0'; byId('connText').textContent = label; };
 
   const renderMeter = (s) => {
@@ -71,12 +79,27 @@
     verify: [['Review ▶', 'start_review']],
     review: [['Re-run review ▶', 'start_review']],
   };
+  // Which stage each intent advances to — so the button visibly moves the user
+  // to that tab immediately (the agent picks up the queued intent to do the work).
+  const INTENT_TARGET = { start_execute: 'execute', start_verify: 'verify', start_review: 'review' };
   const renderActions = (s) => {
     const host = byId('actions'); host.innerHTML = '';
     const st = s.stages[selected]; if (!st) return;
     (INTENTS[st.kind] || []).forEach(([label, name]) => {
       const b = document.createElement('button'); b.className = 'btn primary'; b.textContent = label;
-      b.addEventListener('click', () => { post('/api/intent', { kind: 'intent', name }); b.textContent = 'queued ✓'; });
+      b.addEventListener('click', () => {
+        post('/api/intent', { kind: 'intent', name });
+        // immediate feedback + jump to the target stage so it never feels dead
+        const target = INTENT_TARGET[name];
+        if (target && state && state.stages && state.stages[target]) {
+          selected = target; userPicked = true; render(state);
+          toast(`${label.replace(/[▶\s]+$/, '')} — agent starting…`);
+        } else {
+          b.textContent = 'requested ✓';
+          setTimeout(() => { b.textContent = label; }, 1600);
+          toast(`${label.replace(/[▶\s]+$/, '')} requested`);
+        }
+      });
       host.appendChild(b);
     });
   };
@@ -132,6 +155,78 @@
     if (!f.length) return (st.data || {}).markdown ? md(st.data.markdown) : '<span class="placeholder">No findings.</span>';
     return f.map((x) => `<div class="finding"><div class="fhead"><span class="sev ${esc(x.severity)}">${esc(x.severity)}</span><span class="ftitle">${esc(x.title)}</span>${x.verdict ? `<span class="verdict ${esc(x.verdict)}">${esc(x.verdict)}</span>` : ''}</div>${x.file ? `<div class="floc">${esc(x.file)}${x.line ? ':' + esc(x.line) : ''}</div>` : ''}${x.detail ? `<div class="fdet">${esc(x.detail)}</div>` : ''}</div>`).join('');
   };
+  // ---- rich PLAN renderer (matches the council's plan view) ----------------
+  const RISK_NAMES = ['risks', 'risk', 'edge cases', 'gaps', 'missing steps', 'contradictions'];
+  const PRO_NAMES = ['pros', 'strengths', 'advantages'];
+  const CON_NAMES = ['cons', 'weaknesses', 'trade-offs', 'tradeoffs'];
+  const extractSections = (src, names) => {
+    if (!src) return '';
+    const want = names.map((n) => n.toLowerCase());
+    const chunks = []; let cap = false, buf = [];
+    const flush = () => { if (buf.length) { chunks.push(buf.join('\n').trim()); buf = []; } };
+    src.replace(/\r\n/g, '\n').split('\n').forEach((line) => {
+      const h = line.match(/^(#{1,6})\s+(.*)$/);
+      if (h) { const t = h[2].replace(/[*:#]/g, '').trim().toLowerCase(); if (cap) flush(); cap = want.some((w) => t === w || t.startsWith(w + ' ') || t.includes(w)); return; }
+      if (cap) buf.push(line);
+    });
+    flush();
+    return chunks.filter(Boolean).join('\n\n').trim();
+  };
+  const cardHtml = (cls, title, body) => {
+    const c = (body || '').trim();
+    if (!c || c === '—') return '';
+    return `<div class="card ${cls}"><div class="card-title">${title}</div><div class="md">${md(c)}</div></div>`;
+  };
+  const planBody = (st) => {
+    const d = st.data || {};
+    const text = d.markdown || '';
+    if (!text.trim()) return '<span class="placeholder">No plan yet.</span>';
+    const roster = Array.isArray(d.council) ? d.council : [];
+    let h = '';
+    if (roster.length) {
+      h += '<div class="roster-line">' + roster.map((m) =>
+        `<span class="rchip"><span class="rk">${KIND_ICON[m.kind] || '•'}</span> ${esc(m.id || m.kind)}${m.model ? ` <span class="rmodel">${esc(m.model)}</span>` : ''}${m.role === 'judge' ? ' <span class="rrole">judge</span>' : ''}</span>`).join('') + '</div>';
+    }
+    const cards = cardHtml('risk', '⚠️ Risks &amp; Edge Cases', extractSections(text, RISK_NAMES))
+      + cardHtml('pros', '✅ Pros', extractSections(text, PRO_NAMES))
+      + cardHtml('cons', '⚖️ Cons', extractSections(text, CON_NAMES));
+    if (cards) h += `<div class="insight-cards">${cards}</div>`;
+    h += `<div class="plan-toolbar"><input id="planSearch" class="plan-search" type="search" placeholder="Search in plan… ( / )" /><button id="planCollapse" class="ghost-btn" type="button">Collapse all</button><button id="planCopy" class="ghost-btn" type="button">Copy plan</button></div>`;
+    h += `<div id="planDoc" class="md plan-doc">${md(text)}</div>`;
+    return h;
+  };
+  // wrap H2 sections collapsible + wire search/copy after innerHTML is set
+  const decoratePlan = (text) => {
+    const doc = byId('planDoc'); if (!doc) return;
+    const nodes = Array.from(doc.childNodes); const secs = []; let cur = null;
+    nodes.forEach((n) => {
+      if (n.nodeType === 1 && n.tagName === 'H2') { cur = document.createElement('div'); cur.className = 'md-section'; secs.push(cur); cur.appendChild(n); }
+      else if (cur) cur.appendChild(n); else secs.push(n);
+    });
+    if (secs.some((s) => s.classList && s.classList.contains('md-section'))) {
+      doc.textContent = ''; secs.forEach((s) => doc.appendChild(s));
+      doc.querySelectorAll('.md-section > h2').forEach((hh) => hh.addEventListener('click', () => hh.parentElement.classList.toggle('collapsed')));
+    }
+    const search = byId('planSearch');
+    if (search) search.addEventListener('input', () => {
+      const q = search.value.trim();
+      doc.querySelectorAll('mark').forEach((m) => { const p = m.parentNode; p.replaceChild(document.createTextNode(m.textContent), m); p.normalize(); });
+      if (q.length < 2) return;
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      const w = document.createTreeWalker(doc, NodeFilter.SHOW_TEXT, null); const tgt = []; let nn;
+      while ((nn = w.nextNode())) { if (rx.test(nn.nodeValue)) tgt.push(nn); }
+      let first = null;
+      tgt.forEach((node) => { const frag = document.createDocumentFragment(); let last = 0, s = node.nodeValue, m2; rx.lastIndex = 0;
+        while ((m2 = rx.exec(s))) { if (m2.index > last) frag.appendChild(document.createTextNode(s.slice(last, m2.index))); const mk = document.createElement('mark'); mk.textContent = m2[0]; frag.appendChild(mk); if (!first) first = mk; last = m2.index + m2[0].length; if (m2.index === rx.lastIndex) rx.lastIndex++; }
+        if (last < s.length) frag.appendChild(document.createTextNode(s.slice(last))); node.parentNode.replaceChild(frag, node); });
+      if (first) first.scrollIntoView({ block: 'center' });
+    });
+    const collapse = byId('planCollapse');
+    if (collapse) collapse.addEventListener('click', () => { const ss = doc.querySelectorAll('.md-section'); const open = [...ss].some((s) => !s.classList.contains('collapsed')); ss.forEach((s) => s.classList.toggle('collapsed', open)); collapse.textContent = open ? 'Expand all' : 'Collapse all'; });
+    const copy = byId('planCopy');
+    if (copy) copy.addEventListener('click', () => { (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).catch(() => {}); copy.textContent = 'Copied'; setTimeout(() => copy.textContent = 'Copy plan', 1200); });
+  };
+
   const boardBody = (st) => {
     const runs = (st.data || {}).runs || [];
     if (!runs.length) return '<span class="placeholder">No runs found.</span>';
@@ -148,6 +243,7 @@
     else if (st.kind === 'verify') body.innerHTML = checksHtml((st.data || {}).checks || []);
     else if (st.kind === 'review') body.innerHTML = findingsBody(st);
     else if (st.kind === 'board') body.innerHTML = boardBody(st);
+    else if (st.kind === 'plan') { body.innerHTML = planBody(st); decoratePlan((st.data || {}).markdown || ''); }
     else body.innerHTML = md((st.data || {}).markdown || '');
   };
 

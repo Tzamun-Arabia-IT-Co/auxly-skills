@@ -199,6 +199,12 @@ def _seed_plan(session, plan_path: Path, title: Optional[str]):
     _event(session, {"type": "stage_md", "name": "plan", "kind": "plan", "markdown": plan.get("markdown", "")})
     _event(session, {"type": "stage", "name": "execute", "kind": "execute", "title": "Execute",
                      "status": "pending", "order": 1, "activate": True})
+    # Always seed the full lifecycle so the header shows every step
+    # (Plan ▸ Execute ▸ Verify ▸ Review) from the start — they fill in as reached.
+    _event(session, {"type": "stage", "name": "verify", "kind": "verify", "title": "Verify",
+                     "status": "pending", "order": 2})
+    _event(session, {"type": "stage", "name": "review", "kind": "review", "title": "Review",
+                     "status": "pending", "order": 3})
     for p in plan["phases"]:
         _event(session, {"type": "phase", "stage": "execute", "id": p["id"], "name": p["name"], "status": "pending"})
         for sl in p["slices"]:
