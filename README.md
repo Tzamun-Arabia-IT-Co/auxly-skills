@@ -37,7 +37,17 @@ picks up, so one tab drives the whole flow while every skill stays independently
 
 ## Install
 
-### Option A — Claude Code plugin marketplace (recommended for Claude Code)
+### Option A — one-shot `npx` (no clone, installs into every tool)
+```bash
+npx github:Tzamun-Arabia-IT-Co/auxly-skills              # install into all detected tools
+npx github:Tzamun-Arabia-IT-Co/auxly-skills --dry-run    # preview, change nothing
+npx github:Tzamun-Arabia-IT-Co/auxly-skills --uninstall  # remove everything
+```
+Needs Node + Python 3. It stages the suite into `~/.auxly-skills` (a stable home) and wires every
+detected agent CLI to it — re-run any time to update. *(A bare `npx auxly-skills` will work once the
+package is published to npm; the `github:` form above needs no publish.)*
+
+### Option B — Claude Code plugin marketplace (Claude Code only)
 ```text
 /plugin marketplace add Tzamun-Arabia-IT-Co/auxly-skills
 /plugin install auxly@auxly
@@ -48,8 +58,8 @@ which bundles all six skills under `plugins/auxly/skills/`. They appear immediat
 `/auxly-llm-council`, `/auxly-execute`, … — update later with `/plugin update auxly@auxly`. No clone,
 no PATH changes.
 
-### Option B — install into ALL your agent CLIs (one command)
-The same skills also run in other agent tools. Clone and run the installer:
+### Option C — clone + installer (same as npx, but you keep the repo)
+The same skills run in other agent tools. Clone and run the installer:
 ```bash
 git clone https://github.com/Tzamun-Arabia-IT-Co/auxly-skills.git ~/auxly-skills
 cd ~/auxly-skills

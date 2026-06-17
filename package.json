@@ -1,0 +1,28 @@
+{
+  "name": "auxly-skills",
+  "version": "1.0.0",
+  "description": "Auxly Skills — a multi-model planning council, live execution dashboard, code review, meter, digest and board, in one shared dark Console. Installs into Claude Code, Codex, Gemini, Qwen, OpenCode, Kimi, Antigravity and Cursor.",
+  "bin": {
+    "auxly-skills": "bin/auxly-skills.js"
+  },
+  "files": [
+    "bin/",
+    "plugins/",
+    "install.sh",
+    "sync-console.sh",
+    "AGENTS.md",
+    "LICENSE",
+    "README.md",
+    "assets/"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "keywords": ["auxly", "claude-code", "codex", "gemini", "skills", "agents", "planning", "dashboard", "code-review"],
+  "license": "MIT",
+  "homepage": "https://github.com/Tzamun-Arabia-IT-Co/auxly-skills",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tzamun-Arabia-IT-Co/auxly-skills.git"
+  }
+}
