@@ -186,7 +186,15 @@ mark{background:rgba(245,200,105,.4);color:#fff;border-radius:3px;padding:0 2px;
 .toast.show{opacity:1;transform:none;}
 .toast::before{content:'';width:4px;align-self:stretch;border-radius:3px;background:var(--blue);flex:none;}
 .toast.success::before{background:var(--green);}.toast.error::before{background:var(--risk-ink);}
-@media (max-width:820px){.hero-right{align-items:flex-start;}.insight-cards{grid-template-columns:1fr;}}
+/* always-visible blockers / warnings status */
+.hrow{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;justify-content:space-between;}
+.status-pills{display:flex;gap:.5rem;flex-wrap:wrap;}
+.spill{display:inline-flex;align-items:center;gap:.4rem;font-size:.72rem;font-weight:700;padding:.28rem .6rem;border-radius:999px;border:1px solid var(--border);background:var(--panel-2);color:var(--muted);}
+.spill .si{font-size:.8rem;line-height:1;}
+.spill.ok{color:var(--green,#2dd4a7);border-color:rgba(45,212,167,.35);}
+.spill.block{color:var(--risk-ink);border-color:var(--risk-bd);background:var(--risk-bg);animation:blink 1s infinite;}
+.spill.warn{color:#f5c069;border-color:rgba(245,180,84,.4);background:rgba(245,180,84,.1);}
+@media (max-width:820px){.hero-right{align-items:flex-start;}.insight-cards{grid-template-columns:1fr;}.hrow{flex-direction:column;align-items:flex-start;}}
     </style>
   </head>
   <body>
@@ -205,7 +213,7 @@ mark{background:rgba(245,200,105,.4);color:#fff;border-radius:3px;padding:0 2px;
             <div id="conn" class="conn" data-ok="0"><span class="dot"></span><span id="connText">connecting…</span></div>
           </div>
         </div>
-        <div id="meter" class="meter"></div>
+        <div class="hrow"><div id="meter" class="meter"></div><div id="statusPills" class="status-pills"></div></div>
         <div class="tabs" id="tabs"></div>
         <div class="actions" id="actions"></div>
       </header>

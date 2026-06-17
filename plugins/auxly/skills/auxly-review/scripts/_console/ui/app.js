@@ -104,6 +104,17 @@
     });
   };
 
+  // Always-visible blockers/warnings count so the user knows the state at a
+  // glance — green "0 blockers" when clear, red/amber with a count when not.
+  const renderHealth = (s) => {
+    const host = byId('statusPills'); if (!host) return;
+    const blk = (s.blockers || []).filter((b) => b.status !== 'resolved').length;
+    const wrn = (s.warnings || []).filter((w) => w.status !== 'dismissed').length;
+    host.innerHTML =
+      `<span class="spill ${blk ? 'block' : 'ok'}"><span class="si">${blk ? '⛔' : '✓'}</span>${blk} blocker${blk === 1 ? '' : 's'}</span>` +
+      `<span class="spill ${wrn ? 'warn' : 'ok'}"><span class="si">${wrn ? '⚠️' : '✓'}</span>${wrn} warning${wrn === 1 ? '' : 's'}</span>`;
+  };
+
   const renderNotifs = (s) => {
     const host = byId('notifs'); host.innerHTML = '';
     (s.blockers || []).forEach((b) => {
@@ -260,7 +271,7 @@
     byId('runBadge').dataset.status = s.run_status || 'running';
     byId('runStatusText').textContent = s.run_status || 'running';
     if (!userPicked || !s.stages[selected]) selected = s.active_stage || (s.stage_order || [])[0] || null;
-    renderMeter(s); renderTabs(s); renderActions(s); renderNotifs(s); renderAgents(s); renderStage(s); renderLog(s);
+    renderMeter(s); renderHealth(s); renderTabs(s); renderActions(s); renderNotifs(s); renderAgents(s); renderStage(s); renderLog(s);
   };
 
   const pollState = () => fetch('/api/state', { cache: 'no-store' })
