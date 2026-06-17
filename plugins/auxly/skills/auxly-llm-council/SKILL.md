@@ -28,6 +28,13 @@ self-contained fork of `llm-council` with four upgrades:
    event streams), and **Risks / Pros / Cons** are extracted into highlighted cards.
 
 ## Quick start
+- **First, scan the machine and let the user choose providers.** Run
+  `python3 scripts/llm_council.py detect` — it prints JSON of every installed, planner-capable coder
+  CLI (codex, claude, gemini, agy, opencode, **kimi**, qwen) with model suggestions. Present these to
+  the user as a **multi-select** ("Which coders should sit on the council?") via AskUserQuestion, listing
+  each detected provider as an option (pre-checked). Build the task spec's `agents.planners` from the
+  user's selection (one entry per chosen `kind`); keep `claude` as judge when available. If the user
+  doesn't care, skip the prompt and use all detected CLIs.
 - Check for an existing config first: `$XDG_CONFIG_HOME/auxly-llm-council/agents.json` or
   `~/.config/auxly-llm-council/agents.json`. If none exists, **no setup is required** — the council
   auto-detects installed CLIs (run `./setup.sh` only if the user wants to pin specific models).
@@ -67,6 +74,20 @@ Logic lives in `detect_available_clis()`, `build_auto_council()`, and
 7. Session management: do NOT yield/finish until a full 30-minute timer has elapsed and judge +
    `final-plan.md` are confirmed saved; keep the session open during that interval. Poll every
    20–30s — plans take time; don't panic if it looks idle.
+8. **After the UI returns, check for an Execute handoff and act on it.** When `run --spec` exits, the
+   council UI has closed (the user pressed Execute/Accept, or it timed out). Look in the run folder for
+   an **`EXECUTE-REQUESTED`** marker. If it exists, the user pressed **▶ Execute** and expects the build
+   to start immediately:
+   - The council already auto-opened the execute dashboard (a new browser tab). You do **not** need to
+     reopen a window — but you **must drive it**, or it will sit at "pending" and the user sees no agent
+     working.
+   - Read `execution-config.json` (the chosen `crew` + `workload`) and `final-plan-accepted.md`.
+   - Then **run the `/auxly-execute` flow now**: attach to the live console with `ensure` (not `start` —
+     it is already open), register the crew agents, and execute the plan **slice by slice with your real
+     tools**, updating phase/slice/check status as you go. This is the step that makes the agent visibly
+     work. Do not just report "plan accepted" and stop.
+   - If `/auxly-execute` is installed as a separate skill, invoke it; otherwise drive the vendored/shared
+     console CLI directly (`shared/console/console.py ensure|phase|slice|check|agent …`).
 
 ## Agent configuration (task_spec)
 Use `agents.planners` for any number of planners, and optionally `agents.judge`. If `agents.judge`

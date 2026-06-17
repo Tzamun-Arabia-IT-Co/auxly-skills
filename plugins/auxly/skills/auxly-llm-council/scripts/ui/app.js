@@ -114,7 +114,7 @@
   const PRO_NAMES = ['pros', 'strengths', 'advantages'];
   const CON_NAMES = ['cons', 'weaknesses', 'trade-offs', 'tradeoffs'];
 
-  const KIND_ICON = { codex: '◆', claude: '✦', gemini: '✧', agy: '▲', opencode: '❮❯', custom: '⚙' };
+  const KIND_ICON = { codex: '◆', claude: '✦', gemini: '✧', agy: '▲', opencode: '❮❯', kimi: '◈', qwen: '❖', custom: '⚙' };
 
   // Connection pill keeps its status dot; setStatus would wipe the child node.
   const setConnection = (label) => {
@@ -269,17 +269,27 @@
     }, 4200);
   };
 
-  // ---- Phase stepper -------------------------------------------------------
+  // ---- Lifecycle stepper ---------------------------------------------------
+  // Shows the whole pipeline in the header — Plan ▸ Execute ▸ Verify ▸ Review —
+  // so the user always sees every step and where they are. The council lives in
+  // the Plan step; its sub-state (planning/judging/ready) annotates that step.
   const STEPS = [
-    { key: 'planning', label: 'Planning', match: ['starting', 'planning'] },
-    { key: 'judging', label: 'Judging', match: ['judging'] },
-    { key: 'complete', label: 'Ready', match: ['complete', 'done', 'accepted'] }
+    { key: 'plan', label: 'Plan' },
+    { key: 'execute', label: 'Execute' },
+    { key: 'verify', label: 'Verify' },
+    { key: 'review', label: 'Review' }
   ];
+  const PLAN_SUB = (phase) => {
+    const p = (phase || '').toLowerCase();
+    if (['starting', 'planning'].includes(p)) return 'planning';
+    if (p === 'judging') return 'judging';
+    if (['complete', 'done', 'accepted', 'ready'].includes(p)) return 'ready';
+    return '';
+  };
   const renderStepper = (phase) => {
     if (!elements.stepper) return;
-    const p = (phase || '').toLowerCase();
-    let activeIdx = STEPS.findIndex((s) => s.match.includes(p));
-    if (activeIdx < 0) activeIdx = p ? 0 : -1;
+    const activeIdx = 0; // council always sits on the Plan step
+    const sub = PLAN_SUB(phase);
     elements.stepper.textContent = '';
     STEPS.forEach((step, i) => {
       const wrap = document.createElement('span');
@@ -288,7 +298,8 @@
       bead.className = 'bead';
       bead.textContent = i < activeIdx ? '✓' : String(i + 1);
       const lbl = document.createElement('span');
-      lbl.className = 'slabel'; lbl.textContent = step.label;
+      lbl.className = 'slabel';
+      lbl.textContent = (i === 0 && sub) ? `${step.label} · ${sub}` : step.label;
       wrap.append(bead, lbl);
       elements.stepper.appendChild(wrap);
       if (i < STEPS.length - 1) {
@@ -350,25 +361,38 @@
     });
   };
 
-  // Agents available to hire = the council roster (kind+model), de-duplicated.
-  let agentOptions = []; // [{id, kind, model}]
+  // Agents available to hire = the installed coder CLIs the machine actually has
+  // (from state.available_clis), each with its model suggestions. Falls back to
+  // the council roster if the catalog isn't present (older state).
+  let agentOptions = []; // [{id, kind, label, model, models[]}]
   let crewState = null;  // [{role, agent, model}] — null until first built
   const DEFAULT_ROLES = [
-    { role: 'Engineer', prefer: ['codex', 'claude'] },
+    { role: 'Engineer', prefer: ['codex', 'claude', 'kimi'] },
     { role: 'Reviewer', prefer: ['claude', 'gemini', 'codex'] },
-    { role: 'Tester', prefer: ['gemini', 'claude'] }
+    { role: 'Tester', prefer: ['gemini', 'kimi', 'claude'] }
   ];
   const buildAgentOptions = (state) => {
+    const cat = Array.isArray(state.available_clis) ? state.available_clis : [];
+    if (cat.length) {
+      return cat.map((c) => ({
+        id: c.kind, kind: c.kind, label: c.label || c.kind,
+        models: Array.isArray(c.models) && c.models.length ? c.models : [''],
+        model: c.default_model || (c.models && c.models[0]) || ''
+      }));
+    }
+    // fallback: council roster
     const roster = Array.isArray(state.council) ? state.council : [];
-    const seen = new Set();
-    const opts = [];
+    const seen = new Set(); const opts = [];
     roster.forEach((m) => {
-      const key = m.id;
-      if (seen.has(key)) return; seen.add(key);
-      opts.push({ id: m.id, kind: m.kind, model: m.model || '' });
+      if (seen.has(m.id)) return; seen.add(m.id);
+      opts.push({ id: m.id, kind: m.kind, label: m.id, model: m.model || '', models: [''] });
     });
-    if (!opts.length) opts.push({ id: 'claude', kind: 'claude', model: 'opus' });
+    if (!opts.length) opts.push({ id: 'claude', kind: 'claude', label: 'claude', model: 'opus', models: ['opus', 'sonnet', 'haiku'] });
     return opts;
+  };
+  const modelsForAgent = (agentId) => {
+    const a = agentOptions.find((x) => x.id === agentId);
+    return (a && a.models) || [''];
   };
   const pickAgentFor = (prefer) => {
     for (const kind of prefer) {
@@ -392,28 +416,63 @@
       const role = document.createElement('input'); role.type = 'text'; role.value = member.role;
       role.addEventListener('input', () => { crewState[idx].role = role.value; });
       roleWrap.appendChild(role);
-      // agent select
+      // agent select (installed CLIs)
       const sel = document.createElement('select');
       agentOptions.forEach((a) => {
         const o = document.createElement('option'); o.value = a.id;
-        o.textContent = `${a.id} (${a.kind})`; sel.appendChild(o);
+        o.textContent = a.label || a.id; sel.appendChild(o);
       });
       sel.value = member.agent || (agentOptions[0] && agentOptions[0].id) || '';
+      // model dropdown (a <select> of known models for this agent, with an
+      // editable "Custom…" escape hatch since model names are hard to recall)
+      const modelSel = document.createElement('select');
+      const modelInput = document.createElement('input');
+      modelInput.type = 'text'; modelInput.placeholder = 'custom model name';
+      modelInput.style.display = 'none';
+      const CUSTOM = '__custom__';
+      const fillModels = (agentId, current) => {
+        modelSel.textContent = '';
+        const models = modelsForAgent(agentId);
+        models.forEach((m) => {
+          const o = document.createElement('option');
+          o.value = m; o.textContent = m === '' ? '(default)' : m; modelSel.appendChild(o);
+        });
+        const co = document.createElement('option'); co.value = CUSTOM; co.textContent = 'Custom…'; modelSel.appendChild(co);
+        if (current && !models.includes(current)) {
+          modelSel.value = CUSTOM; modelInput.value = current; modelInput.style.display = '';
+        } else {
+          modelSel.value = current || '';
+          modelInput.style.display = 'none';
+        }
+      };
+      fillModels(sel.value, member.model);
+      modelSel.addEventListener('change', () => {
+        if (modelSel.value === CUSTOM) {
+          modelInput.style.display = ''; modelInput.focus();
+          crewState[idx].model = modelInput.value;
+        } else {
+          modelInput.style.display = 'none';
+          crewState[idx].model = modelSel.value;
+        }
+        markCrewEdited();
+      });
+      modelInput.addEventListener('input', () => { crewState[idx].model = modelInput.value; markCrewEdited(); });
       sel.addEventListener('change', () => {
         crewState[idx].agent = sel.value;
         const a = agentOptions.find((x) => x.id === sel.value);
-        if (a && a.model) { crewState[idx].model = a.model; modelInput.value = a.model; }
+        const dm = (a && a.model) || '';
+        crewState[idx].model = dm;
+        fillModels(sel.value, dm);
         markCrewEdited();
       });
-      // model input
-      const modelInput = document.createElement('input'); modelInput.type = 'text';
-      modelInput.placeholder = 'default'; modelInput.value = member.model || '';
-      modelInput.addEventListener('input', () => { crewState[idx].model = modelInput.value; markCrewEdited(); });
+      const modelWrap = document.createElement('div');
+      modelWrap.style.display = 'flex'; modelWrap.style.flexDirection = 'column'; modelWrap.style.gap = '4px';
+      modelWrap.append(modelSel, modelInput);
       // remove
       const rm = document.createElement('button'); rm.className = 'rm'; rm.type = 'button'; rm.textContent = '✕';
       rm.title = 'Remove role';
       rm.addEventListener('click', () => { crewState.splice(idx, 1); renderCrew(); markCrewEdited(); });
-      row.append(roleWrap, sel, modelInput, rm);
+      row.append(roleWrap, sel, modelWrap, rm);
       elements.crewTable.appendChild(row);
     });
   };
@@ -441,7 +500,7 @@
     }
     setTimeout(() => {
       if (!window.closed) {
-        setStatus(elements.saveStatus, 'accepted — you can close this tab');
+        setStatus(elements.saveStatus, 'done — execution dashboard opening in a new tab; you can close this one');
       }
     }, 300);
   };
@@ -793,8 +852,16 @@
         setStatus(elements.saveStatus, status);
       } else if (action === 'accept' || action === 'execute') {
         setStatus(elements.saveStatus, status);
-        toast(action === 'execute' ? 'Executing' : 'Accepted', status, 'success');
-        attemptCloseUi();
+        const url = message.payload?.url;
+        if (action === 'execute' && url) {
+          // One dashboard: transition THIS tab to the execution console — no
+          // close/reopen. Brief toast, then navigate in place.
+          toast('Executing', 'Opening the execution dashboard in this window…', 'success');
+          setTimeout(() => { window.location.assign(url); }, 700);
+        } else {
+          toast(action === 'execute' ? 'Executing' : 'Accepted', status, 'success');
+          attemptCloseUi();
+        }
       } else if (action === 'refine') {
         setStatus(elements.refineStatus, status);
         toast(message.payload?.status === 'failed' ? 'Refine failed' : 'Refined', status, tone);

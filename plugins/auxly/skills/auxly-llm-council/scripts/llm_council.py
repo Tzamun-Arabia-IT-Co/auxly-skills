@@ -389,6 +389,24 @@ def _build_command_and_input(config: AgentConfig, prompt: str) -> Tuple[List[str
             args.extend(["--attach", config.attach])
         args.append(prompt)
         return (args, None)
+    if kind == "kimi":
+        # Kimi Code: -p runs one prompt non-interactively and prints the response.
+        # (-p cannot be combined with -y/--yolo; print mode needs no approval.)
+        # -m sets the model. The planner prompt already forbids tools/file writes.
+        args = ["kimi", "--output-format", "text"]
+        if config.model:
+            args.extend(["-m", config.model])
+        args.extend(config.extra_args)
+        args.extend(["-p", prompt])
+        return (args, None)
+    if kind == "qwen":
+        # Qwen Code (Gemini-CLI lineage): one-shot prompt via -p, model via -m.
+        args = ["qwen", "-y"]
+        if config.model:
+            args.extend(["-m", config.model])
+        args.extend(config.extra_args)
+        args.extend(["-p", prompt])
+        return (args, None)
     if not config.command:
         raise ValueError(f"custom agent '{config.name}' requires a command")
     args = shlex.split(config.command)
@@ -778,7 +796,7 @@ def _rebuild_ui_state_from_run(run_dir: Path) -> Dict[str, Any]:
     # repopulate on a reopened run (e.g. "claude-opus" -> claude).
     def _infer_kind(member_id: str) -> str:
         low = member_id.lower()
-        for kind in ("codex", "claude", "gemini", "agy", "opencode"):
+        for kind in ("codex", "claude", "gemini", "agy", "opencode", "kimi", "qwen"):
             if kind in low:
                 return kind
         return "custom"
@@ -799,6 +817,7 @@ def _rebuild_ui_state_from_run(run_dir: Path) -> Dict[str, Any]:
         "planners": planners,
         "council": council,
         "council_mode": council_mode,
+        "available_clis": available_cli_catalog(),
         "judge": {
             "status": "complete" if judge_path.exists() else "unknown",
             "summary": load_text(str(judge_path)) if judge_path.exists() else "",
@@ -821,6 +840,89 @@ def _next_numbered_final_plan_path(run_dir: Path) -> Path:
             continue
         max_num = max(max_num, int(match.group(1)))
     return run_dir / f"final-plan-{max_num + 1}.md"
+
+
+def _find_console_cli() -> Optional[Path]:
+    """Locate the shared Auxly Console CLI relative to this skill, across the
+    plugin, symlinked, and vendored layouts."""
+    base = Path(__file__).resolve().parent  # .../auxly-llm-council/scripts
+    candidates = [
+        base.parent.parent.parent / "shared" / "console" / "console.py",  # plugin/cache/symlink
+        base / "_console" / "console.py",                                  # vendored (if ever)
+        base.parent.parent / "shared" / "console" / "console.py",          # alt nesting
+    ]
+    for c in candidates:
+        try:
+            if c.resolve().exists():
+                return c.resolve()
+        except OSError:
+            continue
+    return None
+
+
+def _launch_execute_console(
+    accepted_plan: Path, title: str, crew: Optional[List[Dict[str, Any]]] = None
+) -> Optional[str]:
+    """Open the Auxly execute dashboard on the accepted plan as the SAME, single
+    dashboard — launched headless (no new browser tab); the council UI then
+    redirects its own tab to the returned URL so there is no close/reopen. Also
+    pre-seeds the full Plan ▸ Execute ▸ Verify ▸ Review stage stepper and any
+    chosen crew. Returns the console URL, or None if the console isn't reachable."""
+    console_py = _find_console_cli()
+    if not console_py:
+        return None
+    cwd = str(Path.cwd())
+    session_file = Path(cwd) / "auxly-console" / "current-session.json"
+
+    def _console(args: List[str], timeout: int = 20) -> bool:
+        try:
+            subprocess.run(
+                [sys.executable, str(console_py), *args],
+                cwd=cwd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                timeout=timeout,
+            )
+            return True
+        except Exception:
+            return False
+
+    try:
+        # attach-or-start the one console (headless — no new tab), load the plan.
+        if not _console(["start", "--plan", str(accepted_plan), "--title", title or "Auxly", "--no-open"]):
+            return None
+        # Read the live session URL so the council tab can transition in place.
+        url = None
+        for _ in range(20):
+            if session_file.exists():
+                try:
+                    url = json.loads(session_file.read_text(encoding="utf-8")).get("url")
+                except Exception:
+                    url = None
+                if url:
+                    break
+            time.sleep(0.25)
+        # Pre-seed the rest of the lifecycle so the header shows every step
+        # (Plan + Execute already exist from --plan; add Verify + Review pending).
+        _console(["stage", "verify", "--kind", "verify", "--title", "Verify", "--status", "pending", "--order", "2"])
+        _console(["stage", "review", "--kind", "review", "--title", "Review", "--status", "pending", "--order", "3"])
+        _console(["activate", "execute"])
+        # Register the hired crew so the Agents panel reflects the user's picks.
+        for member in crew or []:
+            if not isinstance(member, dict):
+                continue
+            agent_id = str(member.get("agent") or member.get("role") or "agent").strip() or "agent"
+            _console([
+                "agent", agent_id,
+                "--name", str(member.get("role") or agent_id),
+                "--model", str(member.get("model") or ""),
+                "--role", str(member.get("role") or ""),
+                "--status", "idle",
+            ])
+        return url
+    except Exception:
+        return None
 
 
 def _handle_ui_actions(
@@ -884,18 +986,29 @@ def _handle_ui_actions(
                 except OSError:
                     pass
                 is_execute = path == "/api/execute"
+                console_url = None
+                if is_execute:
+                    # Open the ONE dashboard (headless) and hand back its URL so
+                    # the council tab transitions in place — no close/reopen.
+                    console_url = _launch_execute_console(accept_path, run_dir.name, crew)
                 _ui_action_result(
                     ui_instance,
                     "execute" if is_execute else "accept",
                     "executing" if is_execute else "accepted",
-                    "Plan accepted — crew saved. Hand off to /auxly-execute."
+                    ("Plan accepted — opening the execution dashboard in this window…"
+                     if console_url else "Plan accepted — crew saved.")
                     if is_execute
                     else "accepted plan and closing UI",
-                    None,
+                    console_url,
                     _ui_timestamp(),
                 )
-                stop_event.set()
-                ui_instance.shutdown()
+                # If we handed the tab off to the console, don't shut the council
+                # server until the browser has had a moment to navigate away.
+                if console_url:
+                    threading.Timer(2.5, lambda: (stop_event.set(), ui_instance.shutdown())).start()
+                else:
+                    stop_event.set()
+                    ui_instance.shutdown()
                 continue
             if path == "/api/refine":
                 if not judge or not plan_template:
@@ -1066,10 +1179,65 @@ def _display_model(config: "AgentConfig") -> str:
     return defaults.get(config.kind, "default")
 
 
+# Planner-capable CLIs the council knows how to invoke (each has a command
+# builder in _build_command_and_input). Detection only offers these so the user
+# never selects a provider we can't actually run.
+SUPPORTED_PLANNER_CLIS = ["codex", "claude", "gemini", "agy", "opencode", "kimi", "qwen"]
+
+# Curated model suggestions per provider for the crew "model" dropdown — names
+# are hard to remember. "" = the CLI's account/config default (recommended).
+# The UI still lets the user type a model we don't list.
+KNOWN_MODELS: Dict[str, List[str]] = {
+    "codex": ["", "gpt-5-codex", "gpt-5.2-codex", "o4-mini"],
+    "claude": ["opus", "sonnet", "haiku"],
+    "gemini": ["gemini-3-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash"],
+    "agy": ["", "Gemini 3 Pro (High)", "Claude Opus 4.6 (Thinking)"],
+    "opencode": [""],
+    "kimi": ["", "kimi-k2", "kimi-k2-turbo"],
+    "qwen": ["", "qwen3-coder-plus", "qwen3-coder"],
+    "custom": [""],
+}
+
+# Friendly labels for the provider multi-select.
+CLI_LABELS = {
+    "codex": "Codex (OpenAI)",
+    "claude": "Claude Code",
+    "gemini": "Gemini CLI",
+    "agy": "Antigravity (agy)",
+    "opencode": "OpenCode",
+    "kimi": "Kimi Code",
+    "qwen": "Qwen Code",
+}
+
+
 def detect_available_clis() -> Dict[str, bool]:
     """Probe the PATH for each supported planner CLI."""
-    candidates = ["codex", "claude", "gemini", "agy", "opencode"]
-    return {name: shutil.which(name) is not None for name in candidates}
+    return {name: shutil.which(name) is not None for name in SUPPORTED_PLANNER_CLIS}
+
+
+def available_cli_catalog() -> List[Dict[str, Any]]:
+    """List installed, planner-capable CLIs with their model suggestions —
+    consumed by the `detect` command (provider multi-select) and the crew UI."""
+    out: List[Dict[str, Any]] = []
+    for kind, present in detect_available_clis().items():
+        if not present:
+            continue
+        out.append({
+            "kind": kind,
+            "label": CLI_LABELS.get(kind, kind),
+            "models": KNOWN_MODELS.get(kind, [""]),
+            "default_model": _default_model_for(kind),
+        })
+    return out
+
+
+def _default_model_for(kind: str) -> str:
+    return {
+        "codex": CODEX_MODEL,
+        "claude": CLAUDE_MODEL,
+        "gemini": GEMINI_MODEL,
+        "agy": AGY_MODEL,
+    }.get(kind, "")
 
 
 def build_claude_persona_council() -> Dict[str, Any]:
@@ -1153,6 +1321,12 @@ def build_auto_council() -> Optional[Dict[str, Any]]:
         planners.append(agy_planner)
     if available.get("claude"):
         planners.append({"name": "claude-4", "kind": "claude", "model": CLAUDE_MODEL})
+    if available.get("kimi"):
+        planners.append({"name": "kimi-5", "kind": "kimi"})
+    if available.get("opencode"):
+        planners.append({"name": "opencode-6", "kind": "opencode"})
+    if available.get("qwen"):
+        planners.append({"name": "qwen-7", "kind": "qwen"})
 
     # Prefer Claude as judge for consistent rubric scoring; otherwise reuse the
     # first planner (load_agent_configs handles a missing judge too).
@@ -1603,7 +1777,15 @@ def main() -> int:
     configure = sub.add_parser("configure")
     configure.add_argument("--config", required=False, help="Path to write agents config JSON")
 
+    detect = sub.add_parser("detect", help="List installed planner CLIs + model suggestions as JSON")
+    detect.add_argument("--json", action="store_true", help="(default) emit JSON")
+
     args = parser.parse_args()
+
+    if args.cmd == "detect":
+        catalog = available_cli_catalog()
+        print(json.dumps({"available": catalog, "count": len(catalog)}, indent=2))
+        return 0
 
     if args.cmd == "configure":
         config_path = Path(args.config) if args.config else get_default_config_path()
@@ -1733,6 +1915,7 @@ def main() -> int:
             "planners": initial_planners,
             "council": council_roster,
             "council_mode": council_mode,
+            "available_clis": available_cli_catalog(),
             "judge": {
                 "status": "pending",
                 "summary": "",
