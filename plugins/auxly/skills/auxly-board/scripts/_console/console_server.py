@@ -332,6 +332,11 @@ class ConsoleState:
 
 class _Handler(BaseHTTPRequestHandler):
     server_version = "AuxlyConsole/2.0"
+    # SSE needs a persistent connection. Default HTTP/1.0 has none, so the
+    # /events stream closes immediately and the browser EventSource reconnects
+    # forever (stuck "reconnecting…"). HTTP/1.1 keeps the socket open; every
+    # non-stream response sends Content-Length so keep-alive is framed right.
+    protocol_version = "HTTP/1.1"
 
     def log_message(self, *_a: Any) -> None:
         pass

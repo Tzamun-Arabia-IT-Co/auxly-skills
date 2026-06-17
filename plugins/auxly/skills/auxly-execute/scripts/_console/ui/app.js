@@ -167,13 +167,30 @@
     renderMeter(s); renderTabs(s); renderActions(s); renderNotifs(s); renderAgents(s); renderStage(s); renderLog(s);
   };
 
+  const pollState = () => fetch('/api/state', { cache: 'no-store' })
+    .then((r) => r.json()).then(render).catch(() => {});
+
+  let src = null, pollTimer = null, reconnectTimer = null;
+  const startPolling = () => { if (!pollTimer) pollTimer = setInterval(pollState, 3000); };
+  const stopPolling = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
+
   const connect = () => {
-    if (!window.EventSource) { setConn(false, 'SSE unsupported'); return; }
-    const src = new EventSource(`/events?token=${encodeURIComponent(token)}`);
-    src.onopen = () => setConn(true, 'live');
+    if (!window.EventSource) { setConn(false, 'polling'); startPolling(); pollState(); return; }
+    try { if (src) src.close(); } catch (x) {}
+    src = new EventSource(`/events?token=${encodeURIComponent(token)}`);
+    src.onopen = () => {
+      setConn(true, 'live');
+      stopPolling();
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    };
     src.onmessage = (e) => { try { render(JSON.parse(e.data)); } catch (x) {} };
-    src.onerror = () => setConn(false, 'reconnecting…');
+    src.onerror = () => {
+      setConn(false, 'reconnecting…');
+      startPolling();                 // keep the panel live while the stream is down
+      try { src.close(); } catch (x) {}
+      if (!reconnectTimer) reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(); }, 2500);
+    };
   };
-  fetch('/api/state', { cache: 'no-store' }).then((r) => r.json()).then(render).catch(() => {});
+  pollState();
   connect();
 })();
