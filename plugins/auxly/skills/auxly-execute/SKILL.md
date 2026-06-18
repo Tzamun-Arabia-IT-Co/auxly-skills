@@ -1,7 +1,7 @@
 ---
 name: auxly-execute
 description: >
-  Execute an accepted implementation plan (a final-plan.md from /auxly-llm-council, or any plan
+  Execute an accepted implementation plan (a final-plan.md from /auxly-council, or any plan
   markdown/JSON the user points at). Claude is the single executor: it turns the plan's phases and
   tasks into a native todo list, works them one at a time, shows progress live through Claude Code's
   own todo UI, and writes a short PROGRESS.md you can read or share. Any decision, missing value, or
@@ -22,7 +22,7 @@ agent, do each step and keep the user informed in chat.
 
 ### 1. Load the plan
 Take the plan the user points at — typically `./auxly-council/runs/<ts>/final-plan.md` from
-`/auxly-llm-council`, or any plan markdown / `plan.json`. Read it fully and restate the goal in one or
+`/auxly-council`, or any plan markdown / `plan.json`. Read it fully and restate the goal in one or
 two lines so the user can confirm you understood it before you start.
 
 ### 2. Turn the plan into a todo list
@@ -67,4 +67,4 @@ todos completed. Don't end silently — the user expects an explicit "done" with
 ## Notes
 - No scripts ship with this skill — it is pure instructions over Claude's native tools. That's the
   point: nothing to install, vendor, or keep in sync, so it can't fall out of date.
-- Pairs with `/auxly-llm-council` (feed its `final-plan.md`) but works standalone with any plan file.
+- Pairs with `/auxly-council` (feed its `final-plan.md`) but works standalone with any plan file.

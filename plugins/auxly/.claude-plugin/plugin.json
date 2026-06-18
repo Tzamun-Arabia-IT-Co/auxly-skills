@@ -1,7 +1,7 @@
 {
   "name": "auxly",
-  "description": "Auxly skill suite \u2014 simple and stable. Two skills: auxly-llm-council (multi-model planning council \u2192 one vetted final-plan.md + a self-contained, branded plan.html you review in the browser; no server) and auxly-execute (Claude works the plan using its native todo list for live progress; no dashboard). Pure Python stdlib; no servers, no external deps.",
-  "version": "2.0.3",
+  "description": "Auxly skill suite \u2014 simple and stable. Two skills: auxly-council (multi-model planning council \u2192 one vetted final-plan.md + a self-contained, branded plan.html you review in the browser; no server) and auxly-execute (Claude works the plan using its native todo list for live progress; no dashboard). Pure Python stdlib; no servers, no external deps.",
+  "version": "2.1.0",
   "author": {
     "name": "Auxly"
   },

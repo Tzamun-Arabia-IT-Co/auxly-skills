@@ -12,7 +12,7 @@ Local path (set by the installer): `$AUXLY_SKILLS_HOME` (default `~/.auxly-skill
 
 | Skill | Use it when the user wants to… |
 |---|---|
-| **auxly-llm-council** | plan a change with a bias-resistant multi-model council. It scans installed CLIs (codex/claude/gemini/agy/kimi/qwen/opencode), asks which to include, then merges their plans into one `final-plan.md` + a self-contained `plan.html` to review. |
+| **auxly-council** | plan a change with a bias-resistant multi-model council. It scans installed CLIs (codex/claude/gemini/agy/kimi/qwen/opencode), asks which to include, then merges their plans into one `final-plan.md` + a self-contained `plan.html` to review. |
 | **auxly-execute** | execute an accepted plan. Claude turns it into a native todo list, works it step by step, keeps a `PROGRESS.md`, and asks in chat before any decision or irreversible step. |
 
 Each skill has a full `SKILL.md` under `plugins/auxly/skills/<name>/` — read it for the detailed
@@ -21,7 +21,7 @@ workflow. On Claude Code / OpenCode / Qwen / Kimi these load as native skills (`
 ## The council engine (works from any tool)
 
 ```bash
-COUNCIL="$AUXLY_SKILLS_HOME/plugins/auxly/skills/auxly-llm-council/scripts/llm_council.py"
+COUNCIL="$AUXLY_SKILLS_HOME/plugins/auxly/skills/auxly-council/scripts/llm_council.py"
 
 # 1) scan available planner CLIs (present this list to the user; let them pick which to include)
 python3 "$COUNCIL" detect

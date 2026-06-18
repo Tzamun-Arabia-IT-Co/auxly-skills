@@ -682,8 +682,8 @@ def maybe_trash_empty_dir(path: Path) -> None:
 def get_default_config_path() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME")
     if base:
-        return Path(base) / "auxly-llm-council" / "agents.json"
-    return Path.home() / ".config" / "auxly-llm-council" / "agents.json"
+        return Path(base) / "auxly-council" / "agents.json"
+    return Path.home() / ".config" / "auxly-council" / "agents.json"
 
 
 def load_agent_config_file(path: Path) -> Optional[Dict[str, Any]]:

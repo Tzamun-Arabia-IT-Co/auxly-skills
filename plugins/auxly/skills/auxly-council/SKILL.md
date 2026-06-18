@@ -1,5 +1,5 @@
 ---
-name: auxly-llm-council
+name: auxly-council
 description: >
   Auxly-branded multi-model planning council. Before running, it SCANS the machine for installed
   planner CLIs (Codex, Claude Code, Gemini, agy/Antigravity, kimi, qwen, OpenCode, or custom) and

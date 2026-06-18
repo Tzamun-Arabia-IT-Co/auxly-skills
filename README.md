@@ -23,7 +23,7 @@ parts caused more confusion than value. v2 keeps only what's stable and useful.)
 
 | Skill | What it does |
 |---|---|
-| **`/auxly-llm-council`** | **Scans** your machine for installed model CLIs (Codex, Claude, Gemini, agy/Antigravity, kimi, qwen, OpenCode) and **asks which to include**. The chosen models each write an independent plan; the plans are anonymized, randomized, and merged by a Claude judge into **one vetted `final-plan.md`** plus a **self-contained, Auxly-branded `plan.html`** that opens in your browser for review — no server. No codex/gemini/agy installed? Falls back to a **Claude-only persona council** (architect + pragmatist + risk-hawk). |
+| **`/auxly-council`** | **Scans** your machine for installed model CLIs (Codex, Claude, Gemini, agy/Antigravity, kimi, qwen, OpenCode) and **asks which to include**. The chosen models each write an independent plan; the plans are anonymized, randomized, and merged by a Claude judge into **one vetted `final-plan.md`** plus a **self-contained, Auxly-branded `plan.html`** that opens in your browser for review — no server. No codex/gemini/agy installed? Falls back to a **Claude-only persona council** (architect + pragmatist + risk-hawk). |
 | **`/auxly-execute`** | Claude works the accepted plan using its **native todo list** for live progress (the built-in, can't-get-stuck view) and keeps a short `PROGRESS.md`. Any decision or risky/irreversible step is surfaced as a clear question in chat. No dashboard, no scripts — pure instructions over Claude's own tools. |
 
 All **pure Python standard library + a browser** for the council report. No third-party packages, no
@@ -32,7 +32,7 @@ network/CDN, logo embedded. Runs anywhere.
 ## The flow
 
 ```text
-/auxly-llm-council   →  scan CLIs → you pick → council runs
+/auxly-council   →  scan CLIs → you pick → council runs
                         → writes ./auxly-council/runs/<ts>/final-plan.md + plan.html (opens in browser)
 review plan.html     →  back in Claude Code, reply:  execute  |  refine: <notes>  |  edit final-plan.md
 /auxly-execute       →  Claude works the plan; progress shows in its native todo list + PROGRESS.md
@@ -76,7 +76,7 @@ instructions block (drive them by just asking). Restart a tool after installing 
 
 You normally just **ask** — "plan this with the council", then "execute the plan".
 
-- **Plan** — `/auxly-llm-council`: it scans your CLIs and asks which models to include, asks a few
+- **Plan** — `/auxly-council`: it scans your CLIs and asks which models to include, asks a few
   intake questions, runs the council, and opens `plan.html` for review. Have `codex` / `gemini` / `agy`
   for a multi-vendor council; otherwise it uses a Claude-only persona council automatically.
 - **Review** — read `plan.html` in the browser, then reply in Claude Code: `execute`, `refine: <notes>`,
@@ -98,7 +98,7 @@ auxly-skills/
 ├─ plugins/auxly/
 │  ├─ .claude-plugin/plugin.json
 │  └─ skills/
-│     ├─ auxly-llm-council/            # plan — multi-model council → final-plan.md + plan.html
+│     ├─ auxly-council/            # plan — multi-model council → final-plan.md + plan.html
 │     │  └─ scripts/llm_council.py     #   the whole engine (one file, no server)
 │     └─ auxly-execute/                # execute — instructions only (native todo list)
 ├─ install.sh                          # standalone (non-plugin) installer

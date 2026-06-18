@@ -21,7 +21,7 @@ set -euo pipefail
 HOME_DIR="${HOME}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_SRC="$ROOT/plugins/auxly/skills"
-SKILLS=(auxly-llm-council auxly-execute)
+SKILLS=(auxly-council auxly-execute)
 MARK_BEGIN="<!-- AUXLY-SKILLS:BEGIN (managed by install.sh — do not edit) -->"
 MARK_END="<!-- AUXLY-SKILLS:END -->"
 
@@ -74,7 +74,7 @@ adapter_block(){
 $MARK_BEGIN
 ## Auxly Skills
 Auxly is a simple, stable two-skill suite. Installed at: \`$ROOT\` (export \`AUXLY_SKILLS_HOME=$ROOT\`).
-- **/auxly-llm-council** — scan installed model CLIs, let the user pick, run a bias-resistant planning
+- **/auxly-council** — scan installed model CLIs, let the user pick, run a bias-resistant planning
   council, and write \`final-plan.md\` + a self-contained branded \`plan.html\` to review (no server).
 - **/auxly-execute** — Claude works the accepted plan using its native todo list for live progress.
 Full guide + per-skill workflows: \`$ROOT/AGENTS.md\` and \`$ROOT/plugins/auxly/skills/*/SKILL.md\`.
@@ -133,6 +133,6 @@ fi
 
 say ""
 say "Installed into $installed tool(s)."
-say "Skills-native tools expose: /auxly-llm-council /auxly-execute"
+say "Skills-native tools expose: /auxly-council /auxly-execute"
 say "Instruction-based tools: ask in plain language (\"run the auxly council\", \"execute with the dashboard\")."
 say "Restart your tools to pick everything up."
