@@ -329,6 +329,25 @@ def c_state(a):
     print(json.dumps(_get(_session(a.session), "/api/state"), indent=2))
 
 
+def c_status(a):
+    """Compact, cheap status poll — what the orchestrator checks from time to
+    time to know progress, open blockers, and whether the run is complete."""
+    s = _get(_session(a.session), "/api/state")
+    ex = (s.get("stages", {}).get("execute", {}) or {}).get("data", {}) or {}
+    pr = ex.get("progress", {}) or {}
+    open_blk = [b for b in s.get("blockers", []) if b.get("status") != "resolved"]
+    open_wrn = [w for w in s.get("warnings", []) if w.get("status") != "dismissed"]
+    out = {
+        "run_status": s.get("run_status", ""),
+        "complete": s.get("run_status") == "complete",
+        "progress": {"pct": pr.get("pct", 0), "done": pr.get("done", 0), "total": pr.get("total", 0)},
+        "active_stage": s.get("active_stage", ""),
+        "open_blockers": [{"id": b.get("id"), "subject": b.get("subject")} for b in open_blk],
+        "open_warnings": len(open_wrn),
+    }
+    print(json.dumps(out, indent=2))
+
+
 def c_wait_blocker(a):
     s = _session(a.session)
     deadline = time.time() + a.timeout
@@ -407,6 +426,7 @@ def build_parser() -> argparse.ArgumentParser:
     add("done", c_done, "mark run complete")
     add("poll", c_poll, "drain UI intents/resolutions")
     add("state", c_state, "print state JSON")
+    add("status", c_status, "compact status poll (run_status, progress, open blockers)")
     p = add("wait-blocker", c_wait_blocker, "poll until a blocker resolves (bounded)"); p.add_argument("id"); p.add_argument("--timeout", type=float, default=60.0); p.add_argument("--interval", type=float, default=2.0)
     return ap
 

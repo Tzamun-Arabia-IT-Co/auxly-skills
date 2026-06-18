@@ -106,6 +106,18 @@ python3 scripts/_console/console.py done       # marks the run complete (green)
 ```
 Keep the session responsive until execution finishes so the user can watch and resolve blockers.
 
+**Know when it's done — poll the status, don't assume.** You (the orchestrator) drive the work, so you
+normally know when each slice finishes. But if any part runs in the background / async, or you stepped
+away, **check status from time to time** rather than guessing:
+```bash
+python3 scripts/_console/console.py status   # {run_status, complete, progress, open_blockers, open_warnings}
+```
+Poll this periodically until `complete` is true. If the run is long or runs unattended, schedule a
+recurring check so completion is detected by default — use the `/loop` skill (e.g. `/loop 2m
+<re-check status>`) or a cron/`ScheduleWakeup` so you wake, run `status`, and act when it flips to
+complete or an `open_blockers` entry appears (resolve it, then resume). `wait-blocker` does a bounded
+poll for one specific blocker; `status` is the general "is it done / anything waiting on me?" check.
+
 **Always announce completion — this is the orchestrator's final, required step.** When all stages are
 done, you MUST: (1) call `console.py done` (or `set --status failed`) so `run_status` flips to
 `complete` — the dashboard fires a completion notification (a success toast + a desktop browser
