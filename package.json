@@ -1,7 +1,7 @@
 {
   "name": "auxly-skills",
-  "version": "1.0.0",
-  "description": "Auxly Skills — a multi-model planning council, live execution dashboard, code review, meter, digest and board, in one shared dark Console. Installs into Claude Code, Codex, Gemini, Qwen, OpenCode, Kimi, Antigravity and Cursor.",
+  "version": "2.0.0",
+  "description": "Auxly Skills — a bias-resistant multi-model planning council (→ vetted final-plan.md + a self-contained branded plan.html) and a simple native-todo plan executor. No servers, no external deps. Installs into Claude Code, Codex, Gemini, Qwen, OpenCode, Kimi, Antigravity and Cursor.",
   "bin": {
     "auxly-skills": "bin/auxly-skills.js"
   },
@@ -9,7 +9,6 @@
     "bin/",
     "plugins/",
     "install.sh",
-    "sync-console.sh",
     "AGENTS.md",
     "LICENSE",
     "README.md",
