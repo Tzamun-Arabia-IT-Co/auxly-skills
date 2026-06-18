@@ -29,6 +29,24 @@ per-role CLI. (Real per-role CLI dispatch is a deliberate non-goal of this skill
 
 All commands use the vendored console CLI: `python3 scripts/_console/console.py <verb>`.
 
+**The dashboard is the single control surface — work in the background, never block on a terminal
+prompt.** Once execution starts, keep driving the plan without stopping the chat to ask a free-text
+question. Anything that would make you pause for the user — a decision, a missing value, a risky/
+irreversible step, an FYI — goes **into the dashboard**, not the terminal:
+- A choice or something you need from the user (password location, go/no-go on an irreversible step,
+  pick between options) → raise a **blocker** (`console.py blocker ...`) and `wait-blocker` on it. The
+  user resolves it **in the UI** ("Resolve & resume") and you continue. Do **not** print "(yes / no)"
+  in chat and sit there — that strands the run looking idle (the user can't see a terminal question
+  from the dashboard).
+- A non-blocking heads-up → raise a **warning** (`console.py warning ...`); it shows amber and the user
+  dismisses it. Never silently swallow a concern — surface it.
+
+Run the actual work so the user can keep watching live: do long/independent steps with backgrounded
+shells (Bash `run_in_background`) where it helps, and **poll `status` / `wait-blocker`** to learn when
+they finish or when the user has answered a blocker. The chat stays responsive; the dashboard shows
+truth. The only things that ever stop you are open blockers — and those live in the UI, resolved by the
+user there.
+
 ## Workflow
 
 ### 0. Pick up the council handoff (if present)
@@ -55,12 +73,24 @@ python3 scripts/_console/console.py start --plan /path/to/final-plan.md --title 
   `./auxly-console/current-session.json`. Tell the user the console is open.
 - If a console is already live, use `ensure` instead of `start` to attach without a new tab.
 
-### 2. Execute slice by slice
+### 2. Execute slice by slice — push updates in real time
+The dashboard only reflects what you tell it, and it streams to the browser the instant you emit an
+event (SSE). So update it **as you go, not in a batch at the end** — the user is watching it move:
+- Mark a slice `running` **before** you start the work, and `done` (or `failed`) **immediately after**,
+  not after the whole phase. A slice that is silently worked for minutes looks stalled.
+- Flip the matching **agent row** to `active` while it's working and `idle`/`done` when it finishes, and
+  set `--current` to the slice it's on, so "Agents & Models" tracks reality.
+- `log` short milestones; run `check`s as they complete. Each call is a live push — frequent small
+  events keep progress, the % bar, and the agent dots honest. Treat "no event in a while" as a smell:
+  if a step is long, emit an interim `log`/`--note` or a slice still-`running` heartbeat so the user
+  knows it's alive, not frozen.
 ```bash
 python3 scripts/_console/console.py phase 1 --status active
+python3 scripts/_console/console.py agent eng --status active --current "slice 1.1"
 python3 scripts/_console/console.py slice 1.1 --status running
 # ...do the real work for 1.1 with your tools...
 python3 scripts/_console/console.py slice 1.1 --status done --note "migrated 59 tables"
+python3 scripts/_console/console.py agent eng --status idle
 python3 scripts/_console/console.py phase 1 --status done
 python3 scripts/_console/console.py log "Phase 1 complete"
 ```
@@ -83,7 +113,10 @@ python3 scripts/_console/console.py check lint  --status fail --output "2 errors
 ```
 (For a dedicated, deeper verify pass use /auxly-verify; it renders into the Verify tab.)
 
-### 5. Warnings & blockers
+### 5. Warnings & blockers — every pause goes here, not to the terminal
+This is the channel for *all* user-facing interruptions during a background run. If you catch yourself
+about to type a question into chat ("should I…? (yes/no)"), stop — raise it as a blocker instead so it
+appears in the dashboard the user is watching.
 ```bash
 python3 scripts/_console/console.py warning --subject "PG14 source vs PG16 target" --detail "Intentional; just noting."
 python3 scripts/_console/console.py blocker --id db-pass --slice 1.2 --subject "DB password required" --detail "Need prod Postgres password."
@@ -91,7 +124,17 @@ python3 scripts/_console/console.py wait-blocker db-pass --timeout 120
 ```
 `wait-blocker` returns `{"resolved": true, "resolution": "..."}` when the user clicks **Resolve &
 resume** in the UI. If `resolved:false`, call it again (bounded). Raising a blocker turns the run
-status red/blocked until resolved.
+status red/blocked until resolved — so the dashboard's "0 blockers" badge always tells the user
+truthfully whether anything is waiting on them.
+
+**Rules of thumb:**
+- Needs a human decision / secret / go-ahead on something irreversible → **blocker** + `wait-blocker`
+  (the user answers in the UI, you read the resolution and continue). Never strand the run on a
+  terminal prompt — from the dashboard that just looks frozen/idle.
+- Worth knowing but doesn't stop work → **warning** (amber, dismissable). Surface concerns; don't bury
+  them in chat text the user may not be reading.
+- Resolve a blocker yourself only if conditions changed (`console.py blocker --id <id> --resolve`);
+  otherwise let the user clear it in the UI.
 
 ### 6. Hand off / finish
 The Execute tab shows **[Run checks ▶]** and **[Review ▶]** buttons. When the user clicks one, it

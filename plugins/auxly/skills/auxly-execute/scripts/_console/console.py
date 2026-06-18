@@ -265,6 +265,13 @@ def c_finding(a):
 
 
 def c_blocker(a):
+    if getattr(a, "resolve", False):
+        _event(_session(a.session), {"type": "resolve_blocker", "id": a.id,
+                                     "resolution": a.resolution or "resolved by orchestrator"})
+        print(f"blocker resolved: {a.id}")
+        return
+    if not a.subject:
+        print(json.dumps({"error": "blocker needs --subject (or use --resolve --id <id>)"})); return
     _event(_session(a.session), {"type": "blocker", "id": a.id, "subject": a.subject,
                                  "detail": a.detail or "", "slice": a.slice or "", "stage": a.stage or ""})
     print(f"blocker raised: {a.id or a.subject}")
@@ -413,7 +420,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = add("check", c_check, "update a verify check"); p.add_argument("id"); p.add_argument("--stage", default="verify"); p.add_argument("--status", required=True, choices=["pending", "running", "pass", "fail", "skip"]); p.add_argument("--name"); p.add_argument("--output")
     p = add("finding", c_finding, "add/update a review finding"); p.add_argument("--stage", default="review"); p.add_argument("--id"); p.add_argument("--severity", choices=["critical", "high", "medium", "low", "info"]); p.add_argument("--file"); p.add_argument("--line"); p.add_argument("--title"); p.add_argument("--detail"); p.add_argument("--verdict", choices=["confirmed", "rejected", "unsure"]); p.add_argument("--status")
 
-    p = add("blocker", c_blocker, "raise a RED blocker"); p.add_argument("--subject", required=True); p.add_argument("--detail"); p.add_argument("--id"); p.add_argument("--slice"); p.add_argument("--stage")
+    p = add("blocker", c_blocker, "raise a RED blocker (or --resolve one)"); p.add_argument("--subject"); p.add_argument("--detail"); p.add_argument("--id"); p.add_argument("--slice"); p.add_argument("--stage"); p.add_argument("--resolve", action="store_true", help="clear an existing blocker by --id"); p.add_argument("--resolution", help="note shown when self-resolving")
     p = add("warning", c_warning, "raise an AMBER warning"); p.add_argument("--subject", required=True); p.add_argument("--detail"); p.add_argument("--id"); p.add_argument("--slice"); p.add_argument("--stage")
     p = add("agent", c_agent, "register/update an agent or subagent"); p.add_argument("id"); p.add_argument("--name"); p.add_argument("--kind"); p.add_argument("--model"); p.add_argument("--role"); p.add_argument("--status", choices=["active", "idle", "done"]); p.add_argument("--current"); p.add_argument("--remove", action="store_true", help="remove this agent from the panel")
     p = add("meter", c_meter, "add token usage for an agent/model"); p.add_argument("--agent", required=True); p.add_argument("--model", required=True); p.add_argument("--role"); p.add_argument("--tokens-in", dest="tokens_in", type=int); p.add_argument("--tokens-out", dest="tokens_out", type=int)
