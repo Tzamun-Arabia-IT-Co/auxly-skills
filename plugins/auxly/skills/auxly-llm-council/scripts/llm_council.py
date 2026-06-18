@@ -1291,61 +1291,139 @@ def extract_final_plan(judge_text: str) -> str:
 # ============================================================================
 
 def _inline_md(text: str) -> str:
-    t = _html.escape(text)
+    """Inline Markdown: code spans, links, bold, italic, strikethrough — HTML-safe."""
+    # Stash code spans BEFORE escaping so their contents aren't double-formatted.
+    codes: List[str] = []
+
+    def _stash(m: "re.Match") -> str:
+        codes.append(m.group(1))
+        return f"\x00{len(codes) - 1}\x00"
+
+    t = re.sub(r"`([^`]+)`", _stash, text)
+    t = _html.escape(t)
+
+    def _link(m: "re.Match") -> str:
+        label, url = m.group(1), m.group(2)
+        # Only allow safe URL schemes/relative links (escaped form of ':' is ':').
+        if not re.match(r"^(https?://|mailto:|/|\.|#)", url):
+            return m.group(0)
+        return f'<a href="{url}" target="_blank" rel="noopener">{label}</a>'
+
+    t = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", _link, t)
     t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
-    t = re.sub(r"`([^`]+)`", r"<code>\1</code>", t)
-    return t
+    t = re.sub(r"__(.+?)__", r"<strong>\1</strong>", t)
+    t = re.sub(r"~~(.+?)~~", r"<del>\1</del>", t)
+    t = re.sub(r"(?<![\*\w])\*(?!\s)([^*\n]+?)(?<!\s)\*(?!\*)", r"<em>\1</em>", t)
+    t = re.sub(r"(?<![_\w])_(?!\s)([^_\n]+?)(?<!\s)_(?!\w)", r"<em>\1</em>", t)
+
+    def _restore(m: "re.Match") -> str:
+        return "<code>" + _html.escape(codes[int(m.group(1))]) + "</code>"
+
+    return re.sub(r"\x00(\d+)\x00", _restore, t)
 
 
 def _md_to_html(md_text: str) -> str:
-    """Tiny, dependency-free Markdown -> HTML (headers, lists, bold, code)."""
+    """Dependency-free Markdown -> HTML: headings, ordered/unordered/nested lists,
+    tables, blockquotes, fenced code, horizontal rules, plus rich inline formatting."""
+    lines = (md_text or "").replace("\r\n", "\n").split("\n")
     out: List[str] = []
-    in_code = False
-    in_list = False
+    list_stack: List[Tuple[int, str]] = []  # (indent, "ul"|"ol")
     para: List[str] = []
+    i, n = 0, len(lines)
 
     def flush_para() -> None:
         if para:
-            txt = " ".join(para).strip()
+            txt = " ".join(x.strip() for x in para).strip()
             if txt:
                 out.append("<p>" + _inline_md(txt) + "</p>")
             para.clear()
 
-    def close_list() -> None:
-        nonlocal in_list
-        if in_list:
-            out.append("</ul>")
-            in_list = False
+    def close_all_lists() -> None:
+        while list_stack:
+            out.append(f"</{list_stack.pop()[1]}>")
 
-    for ln in (md_text or "").replace("\r\n", "\n").split("\n"):
-        if ln.strip().startswith("```"):
-            flush_para(); close_list()
-            out.append("<pre><code>" if not in_code else "</code></pre>")
-            in_code = not in_code
+    def _cells(row: str) -> List[str]:
+        row = row.strip()
+        if row.startswith("|"):
+            row = row[1:]
+        if row.endswith("|"):
+            row = row[:-1]
+        return [c.strip() for c in row.split("|")]
+
+    while i < n:
+        ln = lines[i]
+
+        mcode = re.match(r"^\s*```(\w*)\s*$", ln)
+        if mcode:
+            flush_para(); close_all_lists()
+            i += 1
+            buf: List[str] = []
+            while i < n and not re.match(r"^\s*```\s*$", lines[i]):
+                buf.append(lines[i]); i += 1
+            i += 1
+            out.append("<pre><code>" + _html.escape("\n".join(buf)) + "</code></pre>")
             continue
-        if in_code:
-            out.append(_html.escape(ln))
-            continue
-        m = re.match(r"^(#{1,6})\s+(.*)$", ln)
-        if m:
-            flush_para(); close_list()
-            lvl = min(len(m.group(1)), 4)
-            out.append(f"<h{lvl}>{_inline_md(m.group(2))}</h{lvl}>")
-            continue
-        m = re.match(r"^\s*[-*]\s+(.*)$", ln)
-        if m:
-            flush_para()
-            if not in_list:
-                out.append("<ul>"); in_list = True
-            out.append("<li>" + _inline_md(m.group(1)) + "</li>")
-            continue
+
         if not ln.strip():
-            flush_para(); close_list()
+            flush_para(); close_all_lists()
+            i += 1
             continue
-        para.append(ln)
-    flush_para(); close_list()
-    if in_code:
-        out.append("</code></pre>")
+
+        if re.match(r"^\s*([-*_])\1\1[-*_\s]*$", ln) and not re.match(r"^\s*[-*+]\s", ln):
+            flush_para(); close_all_lists()
+            out.append("<hr/>"); i += 1
+            continue
+
+        mh = re.match(r"^(#{1,6})\s+(.*)$", ln)
+        if mh:
+            flush_para(); close_all_lists()
+            lvl = min(len(mh.group(1)), 4)
+            out.append(f"<h{lvl}>{_inline_md(mh.group(2).strip())}</h{lvl}>")
+            i += 1
+            continue
+
+        if ("|" in ln and i + 1 < n and "-" in lines[i + 1]
+                and re.match(r"^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$", lines[i + 1])):
+            flush_para(); close_all_lists()
+            header = _cells(ln)
+            i += 2
+            out.append("<table><thead><tr>"
+                       + "".join(f"<th>{_inline_md(c)}</th>" for c in header)
+                       + "</tr></thead><tbody>")
+            while i < n and "|" in lines[i] and lines[i].strip():
+                cs = _cells(lines[i])
+                out.append("<tr>" + "".join(f"<td>{_inline_md(c)}</td>" for c in cs) + "</tr>")
+                i += 1
+            out.append("</tbody></table>")
+            continue
+
+        if re.match(r"^\s*>\s?", ln):
+            flush_para(); close_all_lists()
+            buf = []
+            while i < n and re.match(r"^\s*>\s?", lines[i]):
+                buf.append(re.sub(r"^\s*>\s?", "", lines[i])); i += 1
+            out.append("<blockquote>" + _md_to_html("\n".join(buf)) + "</blockquote>")
+            continue
+
+        mli = re.match(r"^(\s*)([-*+]|\d+[.)])\s+(.*)$", ln)
+        if mli:
+            flush_para()
+            indent = len(mli.group(1).expandtabs(2))
+            tag = "ol" if re.match(r"\d+[.)]", mli.group(2)) else "ul"
+            while list_stack and list_stack[-1][0] > indent:
+                out.append(f"</{list_stack.pop()[1]}>")
+            if not list_stack or list_stack[-1][0] < indent:
+                out.append(f"<{tag}>"); list_stack.append((indent, tag))
+            elif list_stack[-1][1] != tag:
+                out.append(f"</{list_stack.pop()[1]}>")
+                out.append(f"<{tag}>"); list_stack.append((indent, tag))
+            out.append("<li>" + _inline_md(mli.group(3).strip()) + "</li>")
+            i += 1
+            continue
+
+        para.append(ln); i += 1
+
+    flush_para(); close_all_lists()
     return "\n".join(out)
 
 
@@ -1372,23 +1450,38 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system
 .brief b{color:var(--text);}
 .section-label{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:1.8rem 0 .6rem;font-weight:700;}
 .final{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:.4rem 1.3rem 1.1rem;}
-.final h1,.final h2,.final h3,.final h4{color:#fff;line-height:1.3;}
-.final h1{font-size:1.3rem;border-bottom:1px solid var(--border);padding-bottom:.4rem;}
-.final h2{font-size:1.1rem;margin-top:1.4rem;}
-.final h3{font-size:1rem;color:var(--accent2);}
-.final code{background:var(--panel2);padding:.05rem .35rem;border-radius:5px;font-size:.85em;}
-.final pre{background:#0b0d12;border:1px solid var(--border);border-radius:9px;padding:.8rem;overflow:auto;}
-.final pre code{background:none;padding:0;}
-.final ul{padding-left:1.3rem;}
-.final li{margin:.2rem 0;}
+/* shared rich-text (prose) styling for the final plan and each model's plan */
+.prose{line-height:1.65;}
+.prose h1,.prose h2,.prose h3,.prose h4{color:#fff;line-height:1.3;margin:1.3rem 0 .5rem;}
+.prose h1{font-size:1.3rem;border-bottom:1px solid var(--border);padding-bottom:.4rem;}
+.prose h2{font-size:1.12rem;color:#eef0ff;}
+.prose h3{font-size:1rem;color:var(--accent2);}
+.prose h4{font-size:.92rem;color:var(--accent);}
+.prose p{margin:.6rem 0;}
+.prose strong{color:#fff;}
+.prose em{color:#dfe3f5;}
+.prose a{color:var(--accent2);text-decoration:none;border-bottom:1px solid rgba(90,209,196,.4);}
+.prose a:hover{border-bottom-color:var(--accent2);}
+.prose code{background:var(--panel2);padding:.05rem .35rem;border-radius:5px;font-size:.85em;color:#cfd3ff;}
+.prose pre{background:#0b0d12;border:1px solid var(--border);border-radius:9px;padding:.85rem;overflow:auto;margin:.7rem 0;}
+.prose pre code{background:none;padding:0;color:#d6dbe8;}
+.prose ul,.prose ol{padding-left:1.4rem;margin:.5rem 0;}
+.prose li{margin:.25rem 0;}
+.prose li>ul,.prose li>ol{margin:.25rem 0;}
+.prose blockquote{margin:.7rem 0;padding:.3rem .9rem;border-left:3px solid var(--accent);background:var(--panel2);border-radius:0 8px 8px 0;color:var(--muted);}
+.prose hr{border:none;border-top:1px solid var(--border);margin:1.2rem 0;}
+.prose table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.9em;display:block;overflow-x:auto;}
+.prose th,.prose td{border:1px solid var(--border);padding:.45rem .65rem;text-align:left;vertical-align:top;}
+.prose thead th{background:var(--panel2);color:#fff;font-weight:700;}
+.prose tbody tr:nth-child(even){background:rgba(255,255,255,.02);}
 details{background:var(--panel);border:1px solid var(--border);border-radius:10px;margin:.5rem 0;padding:.2rem .9rem;}
 details summary{cursor:pointer;font-weight:600;padding:.6rem 0;display:flex;align-items:center;gap:.6rem;}
 details[open] summary{border-bottom:1px solid var(--border);margin-bottom:.6rem;}
 .pill{font-size:.68rem;font-weight:700;padding:.16rem .5rem;border-radius:999px;border:1px solid var(--border);}
 .pill.ok{color:var(--green);border-color:rgba(45,212,167,.4);background:rgba(45,212,167,.08);}
 .pill.failed{color:var(--red);border-color:rgba(255,107,129,.4);background:rgba(255,107,129,.08);}
-.model-body{font-size:.85rem;}
-.model-body pre{white-space:pre-wrap;word-wrap:break-word;background:#0b0d12;border:1px solid var(--border);border-radius:8px;padding:.7rem;max-height:420px;overflow:auto;}
+.model-body{font-size:.9rem;}
+.failnote{white-space:pre-wrap;word-wrap:break-word;background:rgba(255,107,129,.06);border:1px solid rgba(255,107,129,.3);border-radius:8px;padding:.7rem;color:#ffb3bf;font-size:.85rem;}
 .next{margin-top:2.2rem;background:linear-gradient(135deg,rgba(124,131,253,.12),rgba(90,209,196,.10));border:1px solid rgba(124,131,253,.4);border-radius:12px;padding:1rem 1.2rem;}
 .next h3{margin:.1rem 0 .5rem;font-size:.95rem;}
 .next code{background:rgba(124,131,253,.18);padding:.1rem .4rem;border-radius:5px;color:#cfd3ff;}
@@ -1417,10 +1510,11 @@ def render_plan_html(
         body_raw = ((r.data or {}).get("text") if ok else (r.error or r.raw_output or "")) or ""
         label = _html.escape(f"{r.name}" + (f" · {kind}" if kind else "") + (f" · {model}" if model else ""))
         pill = '<span class="pill ok">plan</span>' if ok else '<span class="pill failed">failed</span>'
-        cards.append(
-            f"<details><summary>{pill} {label}</summary>"
-            f'<div class="model-body"><pre>{_html.escape(body_raw)}</pre></div></details>'
-        )
+        if ok:
+            inner = f'<div class="model-body prose">{_md_to_html(body_raw)}</div>'
+        else:
+            inner = f'<div class="model-body"><div class="failnote">{_html.escape(body_raw)}</div></div>'
+        cards.append(f"<details><summary>{pill} {label}</summary>{inner}</details>")
     cards_html = "\n".join(cards) or '<p class="sub">No council members ran.</p>'
 
     final_html = _md_to_html(final_text or "_No final plan was produced._")
@@ -1438,7 +1532,7 @@ def render_plan_html(
   <div class="brief"><b>Task:</b> {_html.escape(task_brief or "(no brief)")}</div>
 
   <div class="section-label">Final plan (merged &amp; vetted)</div>
-  <div class="final">{final_html}</div>
+  <div class="final prose">{final_html}</div>
 
   <div class="section-label">Each council member's plan</div>
   {cards_html}
