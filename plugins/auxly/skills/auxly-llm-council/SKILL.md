@@ -7,7 +7,8 @@ description: >
   independent implementation plan; the plans are anonymized, randomized, and merged by a Claude
   judge into one vetted final plan. The result is written to final-plan.md AND a single
   self-contained, Auxly-branded plan.html that opens in the browser for review — no server, no live
-  dashboard. The user reviews the HTML, then returns to Claude Code to say "execute" or "refine".
+  dashboard. The user reviews the HTML, then returns to Claude Code and runs /auxly-execute (or asks,
+  in plain words, for changes to the plan).
   If none of codex/gemini/agy is installed, it falls back to a Claude-only multi-persona council.
   Use whenever you need a robust, bias-resistant plan from multiple models.
 ---
@@ -55,9 +56,10 @@ python3 scripts/llm_council.py run --spec /path/to/spec.json
 
 ### 4. Hand back to the user
 Tell the user: *"Plan ready — I opened `plan.html` for review."* Then they reply in Claude Code:
-- **`/auxly-execute`** → run the execute skill on `final-plan.md`.
-- **`refine: <notes>`** → edit `final-plan.md` per their notes (or re-run the council with an adjusted
-  spec), then re-open the report.
+- **`/auxly-execute`** (a real skill) → run it on `final-plan.md`.
+- **Plain-language refine** (NOT a command — just chat): if they ask for changes ("tighten phase 2",
+  "add a rollback step"), edit `final-plan.md` accordingly (or re-run the council with an adjusted
+  spec), then re-open the report. Don't advertise a `/refine` command — none exists.
 - They can also edit `final-plan.md` directly, then run `/auxly-execute`.
 
 There is no handoff marker, no auto-launched dashboard — the user drives the next step by chatting.

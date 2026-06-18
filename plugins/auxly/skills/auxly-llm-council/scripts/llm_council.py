@@ -1486,6 +1486,8 @@ details[open] summary{border-bottom:1px solid var(--border);margin-bottom:.6rem;
 .next h3{margin:.1rem 0 .5rem;font-size:.95rem;}
 .next code{background:rgba(124,131,253,.18);padding:.1rem .4rem;border-radius:5px;color:#cfd3ff;}
 .next ul{margin:.4rem 0 0;padding-left:1.2rem;color:var(--muted);font-size:.88rem;}
+.next li{margin:.3rem 0;}
+.muted-note{opacity:.7;font-style:italic;}
 """
 
 
@@ -1538,11 +1540,11 @@ def render_plan_html(
   {cards_html}
 
   <div class="next">
-    <h3>✓ Reviewed? Head back to Claude Code and reply:</h3>
+    <h3>✓ Reviewed? Head back to Claude Code:</h3>
     <ul>
-      <li><code>/auxly-execute</code> — work this plan (live progress via Claude's todo list)</li>
-      <li><code>refine: &lt;notes&gt;</code> — revise the plan, then re-open this report</li>
-      <li>or edit <code>final-plan.md</code> directly, then run <code>/auxly-execute</code></li>
+      <li>Run <code>/auxly-execute</code> to work this plan (live progress via Claude's todo list).</li>
+      <li>Or just <b>tell Claude what to change</b> in plain words — it edits <code>final-plan.md</code> (or re-runs the council) and re-opens this report. <span class="muted-note">(“refine” is plain chat, not a command.)</span></li>
+      <li>Or edit <code>final-plan.md</code> yourself, then run <code>/auxly-execute</code>.</li>
     </ul>
   </div>
 </div></body></html>
