@@ -55,10 +55,10 @@ python3 scripts/llm_council.py run --spec /path/to/spec.json
 
 ### 4. Hand back to the user
 Tell the user: *"Plan ready — I opened `plan.html` for review."* Then they reply in Claude Code:
-- **`execute`** → run `/auxly-execute` on `final-plan.md`.
+- **`/auxly-execute`** → run the execute skill on `final-plan.md`.
 - **`refine: <notes>`** → edit `final-plan.md` per their notes (or re-run the council with an adjusted
   spec), then re-open the report.
-- They can also edit `final-plan.md` directly and say `execute`.
+- They can also edit `final-plan.md` directly, then run `/auxly-execute`.
 
 There is no handoff marker, no auto-launched dashboard — the user drives the next step by chatting.
 

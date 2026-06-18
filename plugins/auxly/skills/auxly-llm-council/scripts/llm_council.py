@@ -1540,9 +1540,9 @@ def render_plan_html(
   <div class="next">
     <h3>✓ Reviewed? Head back to Claude Code and reply:</h3>
     <ul>
-      <li><code>execute</code> — work this plan (live progress via Claude's todo list)</li>
+      <li><code>/auxly-execute</code> — work this plan (live progress via Claude's todo list)</li>
       <li><code>refine: &lt;notes&gt;</code> — revise the plan, then re-open this report</li>
-      <li>or edit <code>final-plan.md</code> directly and say <code>execute</code></li>
+      <li>or edit <code>final-plan.md</code> directly, then run <code>/auxly-execute</code></li>
     </ul>
   </div>
 </div></body></html>
