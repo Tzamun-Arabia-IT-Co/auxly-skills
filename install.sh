@@ -21,7 +21,7 @@ set -euo pipefail
 HOME_DIR="${HOME}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_SRC="$ROOT/plugins/auxly/skills"
-SKILLS=(auxly-llm-council auxly-execute auxly-review auxly-meter auxly-digest auxly-board)
+SKILLS=(auxly-llm-council auxly-execute)
 MARK_BEGIN="<!-- AUXLY-SKILLS:BEGIN (managed by install.sh — do not edit) -->"
 MARK_END="<!-- AUXLY-SKILLS:END -->"
 
@@ -73,12 +73,12 @@ adapter_block(){
   cat <<EOF
 $MARK_BEGIN
 ## Auxly Skills
-Auxly is a dev-loop tool suite (plan → execute → verify → review → recap) sharing one live browser
-console. Installed at: \`$ROOT\` (export \`AUXLY_SKILLS_HOME=$ROOT\`).
-Drive it via the shared CLI: \`python3 $ROOT/plugins/auxly/shared/console/console.py --help\`.
+Auxly is a simple, stable two-skill suite. Installed at: \`$ROOT\` (export \`AUXLY_SKILLS_HOME=$ROOT\`).
+- **/auxly-llm-council** — scan installed model CLIs, let the user pick, run a bias-resistant planning
+  council, and write \`final-plan.md\` + a self-contained branded \`plan.html\` to review (no server).
+- **/auxly-execute** — Claude works the accepted plan using its native todo list for live progress.
 Full guide + per-skill workflows: \`$ROOT/AGENTS.md\` and \`$ROOT/plugins/auxly/skills/*/SKILL.md\`.
-Use when the user wants multi-model planning, a live execution dashboard, code review, a token meter,
-a run recap, or an all-runs board.
+Use when the user wants multi-model planning or to execute an accepted plan.
 $MARK_END
 EOF
 }
@@ -133,6 +133,6 @@ fi
 
 say ""
 say "Installed into $installed tool(s)."
-say "Skills-native tools expose: /auxly-llm-council /auxly-execute /auxly-review /auxly-meter /auxly-digest /auxly-board"
+say "Skills-native tools expose: /auxly-llm-council /auxly-execute"
 say "Instruction-based tools: ask in plain language (\"run the auxly council\", \"execute with the dashboard\")."
 say "Restart your tools to pick everything up."

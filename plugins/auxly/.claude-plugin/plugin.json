@@ -1,7 +1,7 @@
 {
   "name": "auxly",
-  "description": "Auxly skill suite \u2014 one shared dark Console for plan \u2192 execute \u2192 verify \u2192 review \u2192 recap. Skills: auxly-llm-council (multi-model planning), auxly-execute (live run dashboard), auxly-review (adversarial code review), auxly-meter (token/cost), auxly-digest (recap), auxly-board (all runs). Pure Python stdlib + browser; no external deps.",
-  "version": "1.1.2",
+  "description": "Auxly skill suite \u2014 simple and stable. Two skills: auxly-llm-council (multi-model planning council \u2192 one vetted final-plan.md + a self-contained, branded plan.html you review in the browser; no server) and auxly-execute (Claude works the plan using its native todo list for live progress; no dashboard). Pure Python stdlib; no servers, no external deps.",
+  "version": "2.0.0",
   "author": {
     "name": "Auxly"
   },

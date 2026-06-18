@@ -16,8 +16,8 @@ from datetime import datetime, timedelta, timezone
 import webbrowser
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
-
-import ui_server
+import base64
+import html as _html
 
 RETRY_LIMIT = 2
 # Planners write a full structured plan in one shot; opus/large models routinely
@@ -619,474 +619,6 @@ def _ui_set_final_plan(
         _ui_update_timestamp(state, timestamp)
     ui_state.mutate(mutator)
     _ui_emit(ui_instance, "final_plan", {"final_plan": final_plan, "timestamp": timestamp})
-
-
-def _ui_action_result(
-    ui_instance: Optional["ui_server.UIServer"],
-    action: str,
-    status: str,
-    message: str,
-    url: Optional[str],
-    timestamp: str,
-) -> None:
-    if not ui_instance:
-        return
-    payload = {"action": action, "status": status, "message": message, "timestamp": timestamp}
-    if url:
-        payload["url"] = url
-    _ui_emit(ui_instance, "action_result", payload)
-
-
-class _KeepaliveController:
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self.keep_open = False
-
-    def set_keep_open(self, value: bool) -> None:
-        with self._lock:
-            self.keep_open = value
-
-    def should_keep_open(self) -> bool:
-        with self._lock:
-            return self.keep_open
-
-
-def _parse_ui_deadline(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
-
-
-def _start_ui_session_timer(
-    ui_instance: "ui_server.UIServer",
-    ui_state: "ui_server.UIState",
-    stop_event: threading.Event,
-    keepalive: Optional[_KeepaliveController],
-) -> None:
-    def run() -> None:
-        while not stop_event.is_set():
-            state = ui_state.get()
-            keep_open = bool(state.get("keep_open"))
-            if keepalive and keepalive.should_keep_open():
-                keep_open = True
-            if not keep_open:
-                deadline = _parse_ui_deadline(state.get("ui_deadline"))
-                if deadline and datetime.now(timezone.utc) >= deadline:
-                    _ui_action_result(
-                        ui_instance,
-                        "session",
-                        "expired",
-                        "session expired",
-                        None,
-                        _ui_timestamp(),
-                    )
-                    stop_event.set()
-                    ui_instance.shutdown()
-                    break
-            time.sleep(1)
-
-    thread = threading.Thread(target=run, name="ui-session-timer", daemon=True)
-    thread.start()
-
-
-def _coerce_text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return str(value)
-
-
-REQUIRED_PLAN_HEADERS = [
-    "# Plan",
-    "## Overview",
-    "## Scope",
-    "## Phases",
-    "## Testing Strategy",
-    "## Risks",
-    "## Pros",
-    "## Cons",
-    "## Rollback Plan",
-    "## Edge Cases",
-]
-
-
-def _build_refine_prompt(plan_template: str, task_brief: str, final_plan: str, context: str) -> str:
-    notes = context.strip() if context else "No extra context provided."
-    headers = "\n".join(REQUIRED_PLAN_HEADERS)
-    return (
-        "You are refining an existing plan. Apply the refinement request to the current plan and "
-        "return the COMPLETE updated plan as Markdown — no preamble, no commentary, no code fences, "
-        "just the plan itself.\n\n"
-        "Hard requirements:\n"
-        "- Output must be a full plan that keeps EVERY one of these section headers, verbatim:\n"
-        f"{headers}\n"
-        "- Preserve all content that the request does not ask you to change.\n"
-        "- The refinement note is an instruction for editing THIS plan's text. You cannot re-run other "
-        "tools or agents; if a note asks for something outside editing the plan (e.g. 'retry codex'), "
-        "fold its intent into the plan where sensible and otherwise return the current plan unchanged — "
-        "but always return a complete, valid plan.\n\n"
-        f"Task brief:\n{task_brief}\n\n"
-        f"Template (for structure reference):\n{plan_template}\n\n"
-        f"Current plan:\n{final_plan}\n\n"
-        f"Refinement request:\n{notes}\n"
-    )
-
-
-def _refine_retry_prompt(prev_output: str, missing_headers: List[str]) -> str:
-    missing = "\n".join(missing_headers)
-    return (
-        "Your previous response was not a valid plan — it is missing these required section headers "
-        "(they must appear verbatim, each on its own line):\n"
-        f"{missing}\n\n"
-        "Return the COMPLETE plan again as Markdown with ALL required sections present. No commentary, "
-        "no code fences — only the plan.\n\n"
-        f"Your previous response:\n{prev_output}\n"
-    )
-
-
-def _run_refine_with_retry(
-    judge: AgentConfig,
-    plan_template: str,
-    task_brief: str,
-    final_plan: str,
-    context: str,
-    timeout: int,
-) -> Tuple[Optional[str], Optional[str]]:
-    """Ask the judge to refine the plan; if the result is missing required
-    headers, re-prompt once with the specific gaps. Returns (plan, error)."""
-    prompt = _build_refine_prompt(plan_template, task_brief, final_plan, context)
-    last_err: Optional[str] = None
-    last_out = ""
-    for attempt in range(2):
-        running = spawn_cli_agent(judge, prompt)
-        raw = collect_cli_output(running, timeout)  # may raise TimeoutError
-        normalized = extract_agent_response(judge, raw).strip()
-        valid, err = validate_markdown_plan(normalized)
-        if valid:
-            return normalized, None
-        last_err, last_out = err, normalized
-        missing = [h for h in REQUIRED_PLAN_HEADERS if h not in normalized]
-        if not missing:
-            break
-        prompt = _refine_retry_prompt(normalized, missing)
-    return None, last_err or "invalid plan"
-
-
-def _rebuild_ui_state_from_run(run_dir: Path) -> Dict[str, Any]:
-    planners = []
-    for plan_path in sorted(run_dir.glob("plan-*.md")):
-        name = plan_path.stem[len("plan-") :]
-        if name.endswith("-attempt1") or name.endswith("-attempt2") or name.endswith("-attempt3"):
-            continue
-        planners.append(
-            {
-                "id": name,
-                "status": "complete",
-                "summary": load_text(str(plan_path)),
-                "errors": [],
-            }
-        )
-    judge_path = run_dir / "judge.md"
-    final_path = run_dir / "final-plan.md"
-    # Infer each member's kind from its id so the roster + crew dropdowns
-    # repopulate on a reopened run (e.g. "claude-opus" -> claude).
-    def _infer_kind(member_id: str) -> str:
-        low = member_id.lower()
-        for kind in ("codex", "claude", "gemini", "agy", "opencode", "kimi", "qwen"):
-            if kind in low:
-                return kind
-        return "custom"
-    council = [
-        {"id": p["id"], "kind": _infer_kind(p["id"]), "model": "", "role": "planner"}
-        for p in planners
-    ]
-    council.append({"id": "judge", "kind": "claude", "model": "", "role": "judge"})
-    council_mode = (
-        "claude-only"
-        if planners and all(_infer_kind(p["id"]) == "claude" for p in planners)
-        else ("multi-vendor" if planners else "")
-    )
-    return {
-        "run_id": run_dir.name,
-        "task_brief": "",
-        "phase": "complete",
-        "planners": planners,
-        "council": council,
-        "council_mode": council_mode,
-        "available_clis": available_cli_catalog(),
-        "judge": {
-            "status": "complete" if judge_path.exists() else "unknown",
-            "summary": load_text(str(judge_path)) if judge_path.exists() else "",
-            "errors": [],
-        },
-        "final_plan": load_text(str(final_path)) if final_path.exists() else "",
-        "errors": [],
-        "keep_open": False,
-        "ui_deadline": _ui_deadline_from_now(DEFAULT_UI_SESSION_TTL_SEC),
-        "timestamps": {"started_at": "", "updated_at": _ui_timestamp()},
-    }
-
-
-def _next_numbered_final_plan_path(run_dir: Path) -> Path:
-    pattern = re.compile(r"^final-plan-(\d+)\.md$")
-    max_num = 0
-    for path in run_dir.glob("final-plan-*.md"):
-        match = pattern.match(path.name)
-        if not match:
-            continue
-        max_num = max(max_num, int(match.group(1)))
-    return run_dir / f"final-plan-{max_num + 1}.md"
-
-
-def _find_console_cli() -> Optional[Path]:
-    """Locate the shared Auxly Console CLI relative to this skill, across the
-    plugin, symlinked, and vendored layouts."""
-    base = Path(__file__).resolve().parent  # .../auxly-llm-council/scripts
-    candidates = [
-        base.parent.parent.parent / "shared" / "console" / "console.py",  # plugin/cache/symlink
-        base / "_console" / "console.py",                                  # vendored (if ever)
-        base.parent.parent / "shared" / "console" / "console.py",          # alt nesting
-    ]
-    for c in candidates:
-        try:
-            if c.resolve().exists():
-                return c.resolve()
-        except OSError:
-            continue
-    return None
-
-
-def _launch_execute_console(
-    accepted_plan: Path, title: str, crew: Optional[List[Dict[str, Any]]] = None
-) -> Optional[str]:
-    """Open the Auxly execute dashboard on the accepted plan as the SAME, single
-    dashboard — launched headless (no new browser tab); the council UI then
-    redirects its own tab to the returned URL so there is no close/reopen. Also
-    pre-seeds the full Plan ▸ Execute ▸ Verify ▸ Review stage stepper and any
-    chosen crew. Returns the console URL, or None if the console isn't reachable."""
-    console_py = _find_console_cli()
-    if not console_py:
-        return None
-    cwd = str(Path.cwd())
-    session_file = Path(cwd) / "auxly-console" / "current-session.json"
-
-    def _console(args: List[str], timeout: int = 20) -> bool:
-        try:
-            subprocess.run(
-                [sys.executable, str(console_py), *args],
-                cwd=cwd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                timeout=timeout,
-            )
-            return True
-        except Exception:
-            return False
-
-    try:
-        # attach-or-start the one console (headless — no new tab), load the plan.
-        if not _console(["start", "--plan", str(accepted_plan), "--title", title or "Auxly", "--no-open"]):
-            return None
-        # Read the live session URL so the council tab can transition in place.
-        url = None
-        for _ in range(20):
-            if session_file.exists():
-                try:
-                    url = json.loads(session_file.read_text(encoding="utf-8")).get("url")
-                except Exception:
-                    url = None
-                if url:
-                    break
-            time.sleep(0.25)
-        # Pre-seed the rest of the lifecycle so the header shows every step
-        # (Plan + Execute already exist from --plan; add Verify + Review pending).
-        _console(["stage", "verify", "--kind", "verify", "--title", "Verify", "--status", "pending", "--order", "2"])
-        _console(["stage", "review", "--kind", "review", "--title", "Review", "--status", "pending", "--order", "3"])
-        _console(["activate", "execute"])
-        # Register the hired crew so the Agents panel reflects the user's picks.
-        for member in crew or []:
-            if not isinstance(member, dict):
-                continue
-            agent_id = str(member.get("agent") or member.get("role") or "agent").strip() or "agent"
-            _console([
-                "agent", agent_id,
-                "--name", str(member.get("role") or agent_id),
-                "--model", str(member.get("model") or ""),
-                "--role", str(member.get("role") or ""),
-                "--status", "idle",
-            ])
-        return url
-    except Exception:
-        return None
-
-
-def _handle_ui_actions(
-    ui_instance: "ui_server.UIServer",
-    ui_state: Optional["ui_server.UIState"],
-    run_dir: Path,
-    task_spec: Dict[str, Any],
-    args: argparse.Namespace,
-    config_path: Path,
-    stop_event: threading.Event,
-    keepalive: Optional[_KeepaliveController] = None,
-    judge: Optional[AgentConfig] = None,
-    plan_template: Optional[str] = None,
-) -> None:
-    while not stop_event.is_set():
-        try:
-            action = ui_instance.actions.get(timeout=0.5)
-        except queue.Empty:
-            continue
-        try:
-            path = action.path
-            payload = action.payload or {}
-            if path == "/api/save":
-                final_plan = _coerce_text(payload.get("final_plan"))
-                save_path = _next_numbered_final_plan_path(run_dir)
-                save_path.write_text(final_plan, encoding="utf-8")
-                _ui_action_result(
-                    ui_instance,
-                    "save",
-                    "saved",
-                    f"Saved at {save_path.resolve()}!",
-                    None,
-                    _ui_timestamp(),
-                )
-                continue
-            if path in ("/api/accept", "/api/execute"):
-                final_plan = _coerce_text(payload.get("final_plan"))
-                accept_path = run_dir / "final-plan-accepted.md"
-                accept_path.write_text(final_plan, encoding="utf-8")
-                final_path = run_dir / "final-plan.md"
-                final_path.write_text(final_plan, encoding="utf-8")
-                _ui_set_final_plan(ui_state, ui_instance, final_plan, _ui_timestamp())
-                # Persist the chosen implementation crew + workload so the next
-                # stage (/auxly-execute) can pick up exactly who was hired for
-                # which role, plus a machine-readable handoff marker.
-                crew = payload.get("crew") if isinstance(payload.get("crew"), list) else []
-                workload = payload.get("workload") if isinstance(payload.get("workload"), dict) else {}
-                exec_config = {
-                    "accepted_plan": "final-plan-accepted.md",
-                    "crew": crew,
-                    "workload": workload,
-                    "accepted_at": _ui_timestamp(),
-                }
-                try:
-                    (run_dir / "execution-config.json").write_text(
-                        json.dumps(exec_config, indent=2), encoding="utf-8"
-                    )
-                    (run_dir / "EXECUTE-REQUESTED").write_text(
-                        f"Run /auxly-execute on {accept_path.resolve()}\n", encoding="utf-8"
-                    )
-                except OSError:
-                    pass
-                is_execute = path == "/api/execute"
-                console_url = None
-                if is_execute:
-                    # Open the ONE dashboard (headless) and hand back its URL so
-                    # the council tab transitions in place — no close/reopen.
-                    console_url = _launch_execute_console(accept_path, run_dir.name, crew)
-                _ui_action_result(
-                    ui_instance,
-                    "execute" if is_execute else "accept",
-                    "executing" if is_execute else "accepted",
-                    ("Plan accepted — opening the execution dashboard in this window…"
-                     if console_url else "Plan accepted — crew saved.")
-                    if is_execute
-                    else "accepted plan and closing UI",
-                    console_url,
-                    _ui_timestamp(),
-                )
-                # If we handed the tab off to the console, don't shut the council
-                # server until the browser has had a moment to navigate away.
-                if console_url:
-                    threading.Timer(2.5, lambda: (stop_event.set(), ui_instance.shutdown())).start()
-                else:
-                    stop_event.set()
-                    ui_instance.shutdown()
-                continue
-            if path == "/api/refine":
-                if not judge or not plan_template:
-                    _ui_action_result(ui_instance, "refine", "failed", "refine unavailable", None, _ui_timestamp())
-                    continue
-                context = _coerce_text(payload.get("context")).strip()
-                final_plan = _coerce_text(payload.get("final_plan")).strip()
-                if not final_plan:
-                    _ui_action_result(ui_instance, "refine", "failed", "no plan to refine", None, _ui_timestamp())
-                    continue
-                start_ts = _ui_timestamp()
-                _ui_update_judge(
-                    ui_state,
-                    ui_instance,
-                    status="running",
-                    summary="refining…",
-                    errors=[],
-                    timestamp=start_ts,
-                )
-                task_brief = build_task_brief(task_spec)
-                try:
-                    normalized, err = _run_refine_with_retry(
-                        judge, plan_template, task_brief, final_plan, context, args.timeout
-                    )
-                except TimeoutError as exc:
-                    _ui_update_judge(
-                        ui_state,
-                        ui_instance,
-                        status="failed",
-                        summary=str(exc),
-                        errors=[str(exc)],
-                        timestamp=_ui_timestamp(),
-                    )
-                    _ui_action_result(
-                        ui_instance, "refine", "failed", f"timed out: {exc}", None, _ui_timestamp()
-                    )
-                    continue
-                if not normalized:
-                    detail = f"could not produce a valid plan ({err})" if err else "could not produce a valid plan"
-                    _ui_update_judge(
-                        ui_state,
-                        ui_instance,
-                        status="needs-fix",
-                        summary="Refine did not yield a complete plan. Your current plan is unchanged — "
-                        "try a more specific edit instruction.\n\n" + (err or ""),
-                        errors=[err] if err else [],
-                        timestamp=_ui_timestamp(),
-                    )
-                    _ui_action_result(ui_instance, "refine", "failed", detail, None, _ui_timestamp())
-                    continue
-                refined_name = f"final-plan-refined-{time.strftime('%Y%m%d-%H%M%S')}.md"
-                refined_path = run_dir / refined_name
-                refined_path.write_text(normalized, encoding="utf-8")
-                final_path = run_dir / "final-plan.md"
-                final_path.write_text(normalized, encoding="utf-8")
-                _ui_set_final_plan(ui_state, ui_instance, normalized, _ui_timestamp())
-                _ui_update_judge(
-                    ui_state,
-                    ui_instance,
-                    status="complete",
-                    summary=normalized,
-                    errors=[],
-                    timestamp=_ui_timestamp(),
-                )
-                _ui_action_result(ui_instance, "refine", "complete", "refined plan saved", None, _ui_timestamp())
-                continue
-            if path == "/api/keepalive":
-                keep_open = bool(payload.get("keep_open"))
-                if keepalive:
-                    keepalive.set_keep_open(keep_open)
-                deadline = "" if keep_open else _ui_deadline_from_now(DEFAULT_UI_SESSION_TTL_SEC)
-                _ui_set_session_state(ui_state, ui_instance, keep_open, deadline, _ui_timestamp())
-                status = "enabled" if keep_open else "disabled"
-                _ui_action_result(ui_instance, "keepalive", status, f"keep open {status}", None, _ui_timestamp())
-                continue
-            _ui_action_result(ui_instance, "unknown", "ignored", f"unhandled action: {path}", None, _ui_timestamp())
-        except Exception as exc:
-            _ui_action_result(ui_instance, "error", "failed", str(exc), None, _ui_timestamp())
 
 
 def render_planner_prompt(task_spec: Dict[str, Any], plan_template: str, prompt_template: str) -> str:
@@ -1752,27 +1284,191 @@ def extract_final_plan(judge_text: str) -> str:
     return after[plan_start:].strip()
 
 
+# ============================================================================
+# Static, self-contained HTML plan report (NO server). Opens via file://.
+# This replaces the old live UI/SSE dashboard: the council writes one plan.html
+# the user reviews, then they reply in Claude Code (execute / refine / edits).
+# ============================================================================
+
+def _inline_md(text: str) -> str:
+    t = _html.escape(text)
+    t = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", t)
+    t = re.sub(r"`([^`]+)`", r"<code>\1</code>", t)
+    return t
+
+
+def _md_to_html(md_text: str) -> str:
+    """Tiny, dependency-free Markdown -> HTML (headers, lists, bold, code)."""
+    out: List[str] = []
+    in_code = False
+    in_list = False
+    para: List[str] = []
+
+    def flush_para() -> None:
+        if para:
+            txt = " ".join(para).strip()
+            if txt:
+                out.append("<p>" + _inline_md(txt) + "</p>")
+            para.clear()
+
+    def close_list() -> None:
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    for ln in (md_text or "").replace("\r\n", "\n").split("\n"):
+        if ln.strip().startswith("```"):
+            flush_para(); close_list()
+            out.append("<pre><code>" if not in_code else "</code></pre>")
+            in_code = not in_code
+            continue
+        if in_code:
+            out.append(_html.escape(ln))
+            continue
+        m = re.match(r"^(#{1,6})\s+(.*)$", ln)
+        if m:
+            flush_para(); close_list()
+            lvl = min(len(m.group(1)), 4)
+            out.append(f"<h{lvl}>{_inline_md(m.group(2))}</h{lvl}>")
+            continue
+        m = re.match(r"^\s*[-*]\s+(.*)$", ln)
+        if m:
+            flush_para()
+            if not in_list:
+                out.append("<ul>"); in_list = True
+            out.append("<li>" + _inline_md(m.group(1)) + "</li>")
+            continue
+        if not ln.strip():
+            flush_para(); close_list()
+            continue
+        para.append(ln)
+    flush_para(); close_list()
+    if in_code:
+        out.append("</code></pre>")
+    return "\n".join(out)
+
+
+def _logo_data_uri() -> str:
+    try:
+        p = Path(resolve_path("../references/auxly-logo.png"))
+        b = base64.b64encode(p.read_bytes()).decode("ascii")
+        return f"data:image/png;base64,{b}"
+    except Exception:
+        return ""
+
+
+_PLAN_CSS = """
+:root{--bg:#0e1016;--panel:#171a22;--panel2:#1e222c;--border:#2a2f3a;--text:#e8eaf0;--muted:#9aa3b2;--accent:#7c83fd;--accent2:#5ad1c4;--green:#2dd4a7;--red:#ff6b81;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+.wrap{max-width:920px;margin:0 auto;padding:2rem 1.3rem 4rem;}
+.head{display:flex;align-items:center;gap:.9rem;margin-bottom:.4rem;}
+.head img{width:46px;height:46px;border-radius:11px;}
+.head h1{font-size:1.5rem;margin:0;font-weight:700;}
+.head h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+.sub{color:var(--muted);font-size:.85rem;margin:0 0 1.4rem;}
+.brief{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:.9rem 1.1rem;margin-bottom:1.5rem;color:var(--muted);font-size:.9rem;}
+.brief b{color:var(--text);}
+.section-label{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:1.8rem 0 .6rem;font-weight:700;}
+.final{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:.4rem 1.3rem 1.1rem;}
+.final h1,.final h2,.final h3,.final h4{color:#fff;line-height:1.3;}
+.final h1{font-size:1.3rem;border-bottom:1px solid var(--border);padding-bottom:.4rem;}
+.final h2{font-size:1.1rem;margin-top:1.4rem;}
+.final h3{font-size:1rem;color:var(--accent2);}
+.final code{background:var(--panel2);padding:.05rem .35rem;border-radius:5px;font-size:.85em;}
+.final pre{background:#0b0d12;border:1px solid var(--border);border-radius:9px;padding:.8rem;overflow:auto;}
+.final pre code{background:none;padding:0;}
+.final ul{padding-left:1.3rem;}
+.final li{margin:.2rem 0;}
+details{background:var(--panel);border:1px solid var(--border);border-radius:10px;margin:.5rem 0;padding:.2rem .9rem;}
+details summary{cursor:pointer;font-weight:600;padding:.6rem 0;display:flex;align-items:center;gap:.6rem;}
+details[open] summary{border-bottom:1px solid var(--border);margin-bottom:.6rem;}
+.pill{font-size:.68rem;font-weight:700;padding:.16rem .5rem;border-radius:999px;border:1px solid var(--border);}
+.pill.ok{color:var(--green);border-color:rgba(45,212,167,.4);background:rgba(45,212,167,.08);}
+.pill.failed{color:var(--red);border-color:rgba(255,107,129,.4);background:rgba(255,107,129,.08);}
+.model-body{font-size:.85rem;}
+.model-body pre{white-space:pre-wrap;word-wrap:break-word;background:#0b0d12;border:1px solid var(--border);border-radius:8px;padding:.7rem;max-height:420px;overflow:auto;}
+.next{margin-top:2.2rem;background:linear-gradient(135deg,rgba(124,131,253,.12),rgba(90,209,196,.10));border:1px solid rgba(124,131,253,.4);border-radius:12px;padding:1rem 1.2rem;}
+.next h3{margin:.1rem 0 .5rem;font-size:.95rem;}
+.next code{background:rgba(124,131,253,.18);padding:.1rem .4rem;border-radius:5px;color:#cfd3ff;}
+.next ul{margin:.4rem 0 0;padding-left:1.2rem;color:var(--muted);font-size:.88rem;}
+"""
+
+
+def render_plan_html(
+    run_dir: Path,
+    task_brief: str,
+    final_text: str,
+    planners: List[AgentConfig],
+    planner_results: List[AgentResult],
+    judge_result: AgentResult,
+) -> Path:
+    logo = _logo_data_uri()
+    by_name = {p.name: p for p in planners}
+    n_ok = sum(1 for r in planner_results if r.valid)
+
+    cards = []
+    for r in planner_results:
+        cfg = by_name.get(r.name)
+        kind = (cfg.kind if cfg else "") or ""
+        model = _display_model(cfg) if cfg else ""
+        ok = r.valid
+        body_raw = ((r.data or {}).get("text") if ok else (r.error or r.raw_output or "")) or ""
+        label = _html.escape(f"{r.name}" + (f" · {kind}" if kind else "") + (f" · {model}" if model else ""))
+        pill = '<span class="pill ok">plan</span>' if ok else '<span class="pill failed">failed</span>'
+        cards.append(
+            f"<details><summary>{pill} {label}</summary>"
+            f'<div class="model-body"><pre>{_html.escape(body_raw)}</pre></div></details>'
+        )
+    cards_html = "\n".join(cards) or '<p class="sub">No council members ran.</p>'
+
+    final_html = _md_to_html(final_text or "_No final plan was produced._")
+    logo_img = f'<img src="{logo}" alt="Auxly"/>' if logo else ""
+    run_label = _html.escape(run_dir.name)
+
+    doc = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Auxly Council — {run_label}</title>
+<style>{_PLAN_CSS}</style></head>
+<body><div class="wrap">
+  <div class="head">{logo_img}<h1>Auxly <span>Council</span></h1></div>
+  <p class="sub">Vetted plan · run {run_label} · {n_ok}/{len(planner_results)} council members produced a plan</p>
+  <div class="brief"><b>Task:</b> {_html.escape(task_brief or "(no brief)")}</div>
+
+  <div class="section-label">Final plan (merged &amp; vetted)</div>
+  <div class="final">{final_html}</div>
+
+  <div class="section-label">Each council member's plan</div>
+  {cards_html}
+
+  <div class="next">
+    <h3>✓ Reviewed? Head back to Claude Code and reply:</h3>
+    <ul>
+      <li><code>execute</code> — work this plan (live progress via Claude's todo list)</li>
+      <li><code>refine: &lt;notes&gt;</code> — revise the plan, then re-open this report</li>
+      <li>or edit <code>final-plan.md</code> directly and say <code>execute</code></li>
+    </ul>
+  </div>
+</div></body></html>
+"""
+    out = run_dir / "plan.html"
+    out.write_text(doc, encoding="utf-8")
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="llm-council")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     run = sub.add_parser("run")
     run.add_argument("--spec", required=True, help="Path to task spec JSON")
-    run.add_argument("--out", required=False, help="Path to write final plan Markdown")
+    run.add_argument("--out", required=False, help="Also copy the final plan Markdown here")
     run.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_SEC)
     run.add_argument("--seed", type=int, default=None)
     run.add_argument("--config", required=False, help="Path to agents config JSON")
-    run.add_argument("--no-ui", action="store_true", help="Disable the live UI server")
-    run.add_argument(
-        "--ui-keepalive-seconds",
-        type=int,
-        default=DEFAULT_UI_KEEPALIVE_SEC,
-        help="Keep the UI server alive for N seconds after completion (0 to disable)",
-    )
-
-    ui = sub.add_parser("ui")
-    ui.add_argument("--run-dir", required=True, help="Path to a run directory to resume")
-    ui.add_argument("--no-open", action="store_true", help="Do not auto-open a browser window")
+    run.add_argument("--no-open", action="store_true", help="Do not auto-open the plan report in a browser")
 
     configure = sub.add_parser("configure")
     configure.add_argument("--config", required=False, help="Path to write agents config JSON")
@@ -1791,68 +1487,18 @@ def main() -> int:
         config_path = Path(args.config) if args.config else get_default_config_path()
         configure_agents(config_path)
         return 0
-    if args.cmd == "ui":
-        run_dir = Path(args.run_dir).expanduser().resolve()
-        snapshot_path = run_dir / "ui-state.json"
-        initial_state: Dict[str, Any] = _rebuild_ui_state_from_run(run_dir)
-        ui_state = ui_server.UIState(initial_state, snapshot_path=snapshot_path)
-        ui_instance = ui_server.start_server(state=ui_state)
-        ui_url = ui_instance.ui_url
-        action_stop = threading.Event()
-        keepalive = _KeepaliveController()
-        # Restore enough context so Refine still works on a reopened run:
-        # resolve a judge from the saved/auto config and load the plan template.
-        restore_judge: Optional[AgentConfig] = None
-        restore_template: Optional[str] = None
-        try:
-            _, restore_judge = load_agent_configs({}, config_path=get_default_config_path())
-            restore_template = load_text(resolve_path("../references/templates/plan.md"))
-        except Exception:
-            restore_judge, restore_template = None, None
-        action_thread = threading.Thread(
-            target=_handle_ui_actions,
-            args=(
-                ui_instance,
-                ui_state,
-                run_dir,
-                {},
-                argparse.Namespace(timeout=DEFAULT_TIMEOUT_SEC),
-                get_default_config_path(),
-                action_stop,
-                keepalive,
-                restore_judge,
-                restore_template,
-            ),
-            name="ui-action-handler",
-            daemon=True,
-        )
-        action_thread.start()
-        _start_ui_session_timer(ui_instance, ui_state, action_stop, keepalive)
-        if not args.no_open:
-            webbrowser.open(ui_url)
-        print(f"UI server running at {ui_url}")
-        try:
-            while not action_stop.is_set():
-                time.sleep(1)
-        except KeyboardInterrupt:
-            ui_instance.shutdown()
-        return 0
 
+    # ---- run -----------------------------------------------------------------
     try:
         task_spec = load_json(args.spec)
     except FileNotFoundError:
-        print(
-            f"Spec file not found: {args.spec}\n"
-            "Uh oh! Your models are not configured. Please run `./setup.sh` to select your models. "
-            "You can override or change these models at any time by running the setup script again.",
-            file=sys.stderr,
-        )
+        print(f"Spec file not found: {args.spec}", file=sys.stderr)
         return 2
+
     config_path = Path(args.config) if args.config else get_default_config_path()
     prompt_text = load_text(resolve_path("../references/prompts.md"))
     planner_prompt = prompt_text.split("## Judge Prompt")[0].split("```text", 1)[1].rsplit("```", 1)[0]
     judge_prompt = prompt_text.split("## Judge Prompt", 1)[1].split("```text", 1)[1].rsplit("```", 1)[0]
-
     plan_template = load_text(resolve_path("../references/templates/plan.md"))
     judge_template = load_text(resolve_path("../references/templates/judge.md"))
 
@@ -1860,21 +1506,9 @@ def main() -> int:
     run_root.mkdir(parents=True, exist_ok=True)
     base_label = task_spec.get("run_id") or task_spec.get("run_label")
     if not base_label:
-        task_label = slugify(task_spec.get("task") or "run")
-        base_label = f"{time.strftime('%Y%m%d')}-{task_label}"
+        base_label = f"{time.strftime('%Y%m%d')}-{slugify(task_spec.get('task') or 'run')}"
     run_dir = unique_run_dir(run_root, base_label)
     run_dir.mkdir(parents=True, exist_ok=True)
-
-    ui_state: Optional[ui_server.UIState] = None
-    ui_instance: Optional[ui_server.UIServer] = None
-    keepalive = _KeepaliveController() if not args.no_ui else None
-    if not args.no_ui:
-        snapshot_path = run_dir / "ui-state.json"
-        ui_state = ui_server.UIState(snapshot_path=snapshot_path)
-        ui_instance = ui_server.start_server(state=ui_state)
-        ui_url = ui_instance.ui_url
-        webbrowser.open(ui_url)
-        print(f"UI server running at {ui_url}")
 
     try:
         planners, judge = load_agent_configs(task_spec, config_path=config_path)
@@ -1885,85 +1519,9 @@ def main() -> int:
     if args.seed is not None:
         random.seed(args.seed)
 
-    if ui_state:
-        timestamp = _ui_timestamp()
-        initial_planners = [
-            {
-                "id": planner.name,
-                "status": "pending",
-                "summary": "",
-                "errors": [],
-                "kind": planner.kind,
-                "model": _display_model(planner),
-            }
-            for planner in planners
-        ]
-        council_roster = [
-            {"id": p.name, "kind": p.kind, "model": _display_model(p), "role": "planner"}
-            for p in planners
-        ]
-        council_roster.append(
-            {"id": judge.name, "kind": judge.kind, "model": _display_model(judge), "role": "judge"}
-        )
-        council_mode = (
-            "claude-only" if all(p.kind == "claude" for p in planners) else "multi-vendor"
-        )
-        initial_state = {
-            "run_id": run_dir.name,
-            "task_brief": build_task_brief(task_spec),
-            "phase": "starting",
-            "planners": initial_planners,
-            "council": council_roster,
-            "council_mode": council_mode,
-            "available_clis": available_cli_catalog(),
-            "judge": {
-                "status": "pending",
-                "summary": "",
-                "errors": [],
-                "kind": judge.kind,
-                "model": _display_model(judge),
-            },
-            "final_plan": "",
-            "errors": [],
-            "keep_open": False,
-            "ui_deadline": _ui_deadline_from_now(DEFAULT_UI_SESSION_TTL_SEC),
-            "timestamps": {"started_at": timestamp, "updated_at": timestamp},
-        }
-        ui_state.set(initial_state)
-        _ui_emit(ui_instance, "phase_change", {"phase": "starting", "timestamp": timestamp})
-
-    if ui_instance:
-        action_stop = threading.Event()
-        action_thread = threading.Thread(
-            target=_handle_ui_actions,
-            args=(
-                ui_instance,
-                ui_state,
-                run_dir,
-                task_spec,
-                args,
-                config_path,
-                action_stop,
-                keepalive,
-                judge,
-                plan_template,
-            ),
-            name="ui-action-handler",
-            daemon=True,
-        )
-        action_thread.start()
-        _start_ui_session_timer(ui_instance, ui_state, action_stop, keepalive)
-
-    _ui_set_phase(ui_state, ui_instance, "planning", _ui_timestamp())
     planner_results = run_planners(
-        task_spec,
-        planners,
-        planner_prompt,
-        plan_template,
-        args.timeout,
-        str(run_dir),
-        ui_state=ui_state,
-        ui_instance=ui_instance,
+        task_spec, planners, planner_prompt, plan_template, args.timeout, str(run_dir),
+        ui_state=None, ui_instance=None,
     )
     latest_valid: Dict[str, Dict[str, Any]] = {}
     for result in planner_results:
@@ -1971,64 +1529,39 @@ def main() -> int:
             latest_valid[result.name] = result.data
     valid_plans = list(latest_valid.values())
 
-    _ui_set_phase(ui_state, ui_instance, "judging", _ui_timestamp())
     randomized_plans = []
     for idx, plan in enumerate(valid_plans):
-        labeled = {"label": f"Plan {idx + 1}", "plan": anonymize_text(plan["text"])}
-        randomized_plans.append(labeled)
+        randomized_plans.append({"label": f"Plan {idx + 1}", "plan": anonymize_text(plan["text"])})
     random.shuffle(randomized_plans)
 
     judge_result = run_judge(
-        task_spec,
-        randomized_plans,
-        judge,
-        judge_prompt,
-        judge_template,
-        args.timeout,
-        str(run_dir),
-        ui_state=ui_state,
-        ui_instance=ui_instance,
+        task_spec, randomized_plans, judge, judge_prompt, judge_template, args.timeout, str(run_dir),
+        ui_state=None, ui_instance=None,
     )
-    metadata = {
-        "used_plans": [p["label"] for p in randomized_plans],
-        "agents": {
-            "planners": [planner.name for planner in planners],
-            "judge": judge.name,
-        },
-        "validation": {
-            "task_spec_valid": True,
-            "plans_valid": {r.name: r.valid for r in planner_results},
-            "judge_valid": judge_result.valid,
-        },
-        "warnings": [r.error for r in planner_results if r.error],
-    }
-
-    _ui_set_phase(ui_state, ui_instance, "finalizing", _ui_timestamp())
     final_text = extract_final_plan(judge_result.data.get("text", "") if judge_result.data else "")
     final_path = run_dir / "final-plan.md"
     final_path.write_text(final_text, encoding="utf-8")
-    _ui_set_final_plan(ui_state, ui_instance, final_text, _ui_timestamp())
-    _ui_set_phase(ui_state, ui_instance, "complete", _ui_timestamp())
+
+    html_path = render_plan_html(
+        run_dir, build_task_brief(task_spec), final_text, planners, planner_results, judge_result
+    )
+    if not args.no_open:
+        try:
+            webbrowser.open(html_path.as_uri())
+        except Exception:
+            pass
 
     if args.out:
         Path(args.out).write_text(final_text, encoding="utf-8")
-    else:
-        print(final_text)
 
-    if ui_instance:
-        resume_cmd = f"python scripts/llm_council.py ui --run-dir {run_dir}"
-        print(f"Resume UI: {resume_cmd}")
-    if ui_instance and args.ui_keepalive_seconds > 0:
-        print(f"Keeping UI server alive for {args.ui_keepalive_seconds}s unless kept open...")
-        start = time.time()
-        while True:
-            if keepalive and keepalive.should_keep_open():
-                time.sleep(1)
-                continue
-            if time.time() - start >= args.ui_keepalive_seconds:
-                break
-            time.sleep(1)
-        ui_instance.shutdown()
+    print(json.dumps({
+        "run_dir": str(run_dir),
+        "final_plan": str(final_path),
+        "plan_html": str(html_path),
+        "planners_ok": sum(1 for r in planner_results if r.valid),
+        "planners_total": len(planner_results),
+        "judge_valid": judge_result.valid,
+    }, indent=2))
 
     maybe_trash_empty_dir(run_dir)
     return 0
