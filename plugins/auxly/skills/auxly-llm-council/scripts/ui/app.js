@@ -980,7 +980,7 @@
       { final_plan: elements.finalPlanEditor.value, crew: crewState || [], workload },
       elements.saveStatus
     );
-    toast('Executing', 'Plan + crew handed off to /auxly-execute', 'success');
+    toast('Plan accepted', 'Crew saved. Opening the execution dashboard — run /auxly-execute in Claude Code to start.', 'success');
   };
   const doSave = () => {
     postAction('/api/save', { final_plan: elements.finalPlanEditor.value }, elements.saveStatus);

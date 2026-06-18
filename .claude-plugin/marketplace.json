@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Auxly skills: a bias-resistant multi-model planning council and a live execution dashboard.",
-    "version": "1.1.0"
+    "version": "1.1.1"
   },
   "plugins": [
     {
       "name": "auxly",
       "source": "./plugins/auxly",
       "description": "Auxly Council (multi-model bias-resistant planning with a branded live UI) + Auxly Execute Dashboard (run an accepted plan with a live progress, blocker, and agent dashboard).",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "author": { "name": "Auxly" },
       "keywords": ["planning", "council", "multi-agent", "dashboard", "execution", "auxly"]
     }

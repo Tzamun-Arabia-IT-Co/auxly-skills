@@ -195,6 +195,12 @@ mark{background:rgba(245,200,105,.4);color:#fff;border-radius:3px;padding:0 2px;
 .btn.next.ready{animation:nextpulse 1.2s ease-in-out infinite;box-shadow:0 0 0 0 rgba(45,212,167,.55);}
 .btn.next:not(.ready){opacity:.85;}
 @keyframes nextpulse{0%{box-shadow:0 0 0 0 rgba(45,212,167,.55);}70%{box-shadow:0 0 0 10px rgba(45,212,167,0);}100%{box-shadow:0 0 0 0 rgba(45,212,167,0);}}
+/* waiting-for-orchestrator guide (execute tab, before anything runs) */
+.orchwait{border:1px solid rgba(124,131,253,.45);background:rgba(124,131,253,.10);border-radius:12px;padding:.7rem .85rem;margin-bottom:.8rem;animation:owpulse 2s ease-in-out infinite;}
+.orchwait .ow-h{font-weight:700;font-size:.85rem;color:#a9b0ff;margin-bottom:.3rem;}
+.orchwait .ow-b{font-size:.78rem;color:var(--muted);line-height:1.5;}
+.orchwait code{background:rgba(124,131,253,.18);padding:.05rem .35rem;border-radius:5px;font-size:.74rem;color:#cfd3ff;}
+@keyframes owpulse{0%,100%{border-color:rgba(124,131,253,.30);}50%{border-color:rgba(124,131,253,.7);}}
 /* always-visible blockers / warnings status */
 .hrow{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;justify-content:space-between;}
 .status-pills{display:flex;gap:.5rem;flex-wrap:wrap;}

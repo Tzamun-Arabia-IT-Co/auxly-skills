@@ -173,9 +173,23 @@
   };
 
   const checksHtml = (checks) => `<div class="checks">${checks.map((c) => `<div class="check" data-s="${esc(c.status)}"><span class="cic">${CICON[c.status] || ''}</span><span class="cname">${esc(c.name)}</span>${c.output ? `<span class="cout">${esc(c.output)}</span>` : ''}</div>`).join('')}</div>`;
-  const execBody = (st) => {
+  const execBody = (st, s) => {
     const d = st.data || {}; const phases = d.phases || []; const pr = d.progress || { done: 0, total: 0, pct: 0 };
-    let h = `<div class="prow"><span>Progress</span><span><b>${pr.pct}%</b> · ${pr.done}/${pr.total} slices</span></div><div class="bar"><span style="width:${pr.pct}%"></span></div>`;
+    const activeAgents = ((s && s.agents) || []).filter((a) => (a.status || 'idle') === 'active').length;
+    const runDone = s && s.run_status === 'complete';
+    let h = '';
+    // Not started yet: phases exist, nothing has progressed, nobody is driving.
+    // The dashboard is a monitor — it does NOT auto-run. Tell the user how to start.
+    if (phases.length && pr.pct === 0 && activeAgents === 0 && !runDone) {
+      h += `<div class="orchwait">
+        <div class="ow-h">⏳ Waiting for the orchestrator — execution does not auto-start</div>
+        <div class="ow-b">This dashboard only <b>monitors</b> the run. To begin, open <b>Claude Code</b> and run
+        <code>/auxly-execute</code> (or just say “execute this plan”). The agent then works each slice and the
+        rows below turn <b>running → done</b> live. If you already started it, the agent is likely
+        <b>paused asking you to confirm in the terminal</b> — answer there and it resumes.</div>
+      </div>`;
+    }
+    h += `<div class="prow"><span>Progress</span><span><b>${pr.pct}%</b> · ${pr.done}/${pr.total} slices</span></div><div class="bar"><span style="width:${pr.pct}%"></span></div>`;
     h += phases.map((p) => `<div class="phase"><div class="phead"><span class="pid">${esc(p.id)}</span><span class="pname">${esc(p.name)}</span><span class="pstat" data-s="${esc(p.status)}">${esc(p.status)}</span></div>
       <div class="slices">${(p.slices || []).map((sl) => `<div class="slice" data-s="${esc(sl.status)}"><span class="sic">${SICON[sl.status] || ''}</span><span class="sid">${esc(sl.id)}</span><span class="sname">${esc(sl.name)}</span>${sl.note ? `<span class="snote">${esc(sl.note)}</span>` : ''}</div>`).join('')}</div></div>`).join('');
     if ((d.checks || []).length) h += `<div style="margin-top:.6rem" class="panel-sub">Checks</div>` + checksHtml(d.checks);
@@ -270,7 +284,7 @@
     byId('stageTitle').textContent = st.title || st.name;
     byId('stageSub').textContent = st.status || '';
     const body = byId('stageBody');
-    if (st.kind === 'execute') body.innerHTML = execBody(st);
+    if (st.kind === 'execute') body.innerHTML = execBody(st, s);
     else if (st.kind === 'verify') body.innerHTML = checksHtml((st.data || {}).checks || []);
     else if (st.kind === 'review') body.innerHTML = findingsBody(st);
     else if (st.kind === 'board') body.innerHTML = boardBody(st);
