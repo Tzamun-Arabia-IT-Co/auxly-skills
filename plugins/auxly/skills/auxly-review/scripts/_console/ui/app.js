@@ -284,6 +284,23 @@
     host.scrollTop = host.scrollHeight;
   };
 
+  // Try to enable desktop notifications quietly so the completion ping can
+  // reach the user even if the tab is in the background.
+  if (window.Notification && Notification.permission === 'default') {
+    try { Notification.requestPermission(); } catch (e) { /* ignore */ }
+  }
+  let lastRunStatus = null;
+  const notifyComplete = (s) => {
+    const blk = (s.blockers || []).filter((b) => b.status !== 'resolved').length;
+    const done = (s.stages.execute && (s.stages.execute.data || {}).progress) || {};
+    const title = s.title || 'Auxly run';
+    const msg = `✓ ${title} complete${done.total ? ` — ${done.done}/${done.total} slices` : ''} · ${blk} open blockers`;
+    toast(msg, 'success');
+    if (window.Notification && Notification.permission === 'granted') {
+      try { new Notification('Auxly — task complete', { body: msg }); } catch (e) { /* ignore */ }
+    }
+  };
+
   const render = (s) => {
     state = s;
     byId('runTitle').textContent = s.title || 'Auxly';
@@ -292,6 +309,10 @@
     byId('runStatusText').textContent = s.run_status || 'running';
     if (!userPicked || !s.stages[selected]) selected = s.active_stage || (s.stage_order || [])[0] || null;
     renderMeter(s); renderHealth(s); renderTabs(s); renderActions(s); renderNotifs(s); renderAgents(s); renderStage(s); renderLog(s);
+    // Orchestrator finished → fire a one-time completion notification.
+    const rs = s.run_status || '';
+    if (rs === 'complete' && lastRunStatus && lastRunStatus !== 'complete') notifyComplete(s);
+    lastRunStatus = rs;
   };
 
   const pollState = () => fetch('/api/state', { cache: 'no-store' })

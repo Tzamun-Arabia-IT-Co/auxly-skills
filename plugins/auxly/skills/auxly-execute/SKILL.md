@@ -106,6 +106,14 @@ python3 scripts/_console/console.py done       # marks the run complete (green)
 ```
 Keep the session responsive until execution finishes so the user can watch and resolve blockers.
 
+**Always announce completion — this is the orchestrator's final, required step.** When all stages are
+done, you MUST: (1) call `console.py done` (or `set --status failed`) so `run_status` flips to
+`complete` — the dashboard fires a completion notification (a success toast + a desktop browser
+notification if the user granted permission), so they're pinged even with the tab in the background;
+and (2) post a short **completion report in chat** — what shipped (phases/slices done), test/check
+results, review findings (confirmed vs rejected), any blockers hit + how resolved, and the run path.
+Do not end the task silently; the user expects an explicit "task complete" from the orchestrator.
+
 ## Console UI (shared)
 - Auxly dark theme + embedded logo, one tab. Stage tabs across the top with live status dots.
 - **Agents & Models** panel: active (green, blinking) / idle / done, with model + current slice.
