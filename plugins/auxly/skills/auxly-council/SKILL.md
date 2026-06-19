@@ -99,9 +99,23 @@ Logic: `detect_available_clis()`, `build_auto_council()`, `build_claude_persona_
 
 ## The plan.html report
 - One self-contained file in the run dir (`render_plan_html` in `scripts/llm_council.py`).
-- Dark Auxly theme, embedded logo (base64 from `references/auxly-logo.png`), no network/CDN.
-- Sections: the **merged final plan** (rendered Markdown), and a collapsible block per council member
-  (each model's plan, or a humanized failure reason). All agent text is HTML-escaped.
+- Editorial dark Auxly theme (serif headlines + mono labels, layered gradient/grain/grid
+  atmosphere), embedded logo (base64 from `references/auxly-logo.png`), no network/CDN/web fonts.
+- Sections, top to bottom:
+  - **Masthead** — brand, a `Vetted Plan` kicker, the **plan title** (derived from the task), a meta
+    line, and a **council line-up** of member chips (green dot = produced a plan, red = failed).
+  - **Task brief** — the intake brief, rendered as rich Markdown inside a scroll box.
+  - **Workflow** — *shown only when applicable*: a visual diagram of the final plan's phases. It is
+    generated automatically from the plan's `### Phase N:` headings (each node shows the phase name +
+    its `#### Task` count). Layout adapts: a horizontal scrollable strip for short/few phases, or a
+    vertical numbered timeline when there are 5+ phases or a long phase name. If the merged plan has
+    fewer than 2 phases, the Workflow section is omitted. So the diagram's quality depends on the plan
+    using the standard `## Phases` / `### Phase N:` / `#### Task` structure from
+    `references/templates/plan.md` — keep that structure when editing `final-plan.md` if you want the
+    workflow to render.
+  - **Final plan** — the merged, vetted plan (rendered Markdown) in a scroll box.
+  - **Each council member's plan** — a collapsible card per member (the model's plan, or a humanized
+    failure reason). All agent text is HTML-escaped.
 - A footer reminds the user how to reply in Claude Code (execute / refine / edit).
 
 ## References

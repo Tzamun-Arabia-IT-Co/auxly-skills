@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Auxly skills: a bias-resistant multi-model planning council (→ vetted plan + branded static HTML) and a simple native-todo plan executor. No servers, no external deps.",
-    "version": "2.2.1"
+    "version": "2.2.2"
   },
   "plugins": [
     {
       "name": "auxly",
       "source": "./plugins/auxly",
       "description": "Auxly Council (multi-model bias-resistant planning → final-plan.md + a self-contained branded plan.html you review in the browser) + Auxly Execute (Claude works the plan via its native todo list). Simple and stable: no servers, no external deps.",
-      "version": "2.2.1",
+      "version": "2.2.2",
       "author": { "name": "Auxly" },
       "keywords": ["planning", "council", "multi-agent", "execution", "auxly"]
     }
