@@ -2,69 +2,112 @@
 name: auxly-execute
 description: >
   Execute an accepted implementation plan (a final-plan.md from /auxly-council, or any plan
-  markdown/JSON the user points at). Claude is the single executor: it turns the plan's phases and
-  tasks into a native todo list, works them one at a time, shows progress live through Claude Code's
-  own todo UI, and writes a short PROGRESS.md you can read or share. Any decision, missing value, or
-  risky/irreversible step is surfaced as a clear question in chat before proceeding — never silently.
-  Deliberately simple: no web server, no dashboard, no background daemons. Use when the user accepts
-  a plan and says "execute", "run the plan", "build this", or "implement final-plan.md".
+  markdown/JSON the user points at). Claude acts as the ORCHESTRATOR: it first asks the user which
+  agents/models should form the execution crew (implementer, tester, reviewer), then runs the
+  implementation through background subagents, monitors them, and gates each chunk of work behind a
+  tester subagent (runs the relevant tests) and a reviewer subagent (code review) before moving on.
+  Progress is shown live through Claude Code's native todo list plus a short PROGRESS.md. Any decision,
+  missing value, or risky/irreversible step is surfaced as a clear question in chat — never silently,
+  and never delegated to a background agent. Use when the user accepts a plan and says "execute",
+  "run the plan", "build this", or "implement final-plan.md".
 ---
 
 # Auxly Execute
 
-Execute an accepted plan. **Claude is the only executor** — it does the work with its own tools and
-shows progress through Claude Code's **native todo list** (the stable, built-in live view). No console
-server, no SSE, no separate dashboard to babysit. That machinery was removed on purpose: it was the
-main source of "looks frozen / nothing happens" confusion. The honest model is simpler — you, the
-agent, do each step and keep the user informed in chat.
+Execute an accepted plan. **Claude is the orchestrator**: it picks a crew with the user, dispatches the
+implementation to **background subagents**, **monitors** them, and runs a **tester** and a **reviewer**
+over each chunk before it's accepted. The user watches progress through Claude Code's **native todo
+list** and a short `PROGRESS.md`. There is no web dashboard or daemon — the todo list + chat + the
+subagents' returned reports are the status surface (that's deliberate: a custom live dashboard was the
+old "looks frozen" trap).
 
 ## Workflow
 
 ### 1. Load the plan
 Take the plan the user points at — typically `./auxly-council/runs/<ts>/final-plan.md` from
-`/auxly-council`, or any plan markdown / `plan.json`. Read it fully and restate the goal in one or
-two lines so the user can confirm you understood it before you start.
+`/auxly-council`, or any plan markdown / `plan.json`. Read it fully and restate the goal in one or two
+lines so the user can confirm you understood it before anything runs.
 
-### 2. Turn the plan into a todo list
-Use **TodoWrite** to create one todo per phase/task in the plan (keep the plan's own ordering and
-dependencies). This *is* the live progress view — the user watches it update in Claude Code. Mark
-exactly one item `in_progress` at a time; mark it `completed` the moment it's done, before starting the
-next. Don't batch completions at the end — that's what makes progress look stalled.
+### 2. Pick the execution crew (REQUIRED first interactive step)
+Before doing any work, let the user choose **who runs this execution**. Three roles:
+- **Implementer** — does the code changes for each task.
+- **Tester** — writes/runs the relevant tests and reports pass/fail.
+- **Reviewer** — reviews the implementer's diff for bugs, security, and plan-adherence.
 
-### 3. Work it, step by step
-For each task: do the real work with your tools, run the relevant build/test/lint for that step, and
-report a one-line result before moving on. Keep momentum — the user can see the todo list move and
-read your short notes; you don't need a separate UI to prove work is happening.
+Offer concrete backings for each role and let the user select (use **AskUserQuestion**, one question
+per role, multi-select where it makes sense):
+- **Claude subagents** (always available) — a general-purpose subagent for the implementer, and
+  specialized ones where they fit (e.g. a `code-reviewer` / language-specific reviewer for the reviewer
+  role, a TDD/test agent for the tester). This is the default if the user has no preference.
+- **Installed model CLIs** — scan the machine the same way the council does and offer any that are
+  present (codex, gemini, agy/Antigravity, etc.). To list them, reuse the council's detector:
+  `python3 <auxly-council skill dir>/scripts/llm_council.py detect` (the auxly-council skill lives
+  next to this one — under the same `skills/` dir, or the plugin cache). Only offer CLIs that the scan
+  actually finds; never assume one is installed.
 
-### 4. Surface every decision in chat — don't stall silently
-When you hit something that needs the user (a missing secret/value, a go/no-go on an irreversible or
-production step, a real choice between options), **ask a clear, specific question in chat and wait**.
-State what you need and why, and what you'll do with each answer. For risky/irreversible steps
-(deploys, schema changes, deletions, cutovers, anything touching production), follow the safety rules:
-do not run them yourself — give the user the exact command and let them run it, or get explicit
-per-step approval first. Never guess on something irreversible.
+Confirm the chosen crew back to the user in one line (e.g. "Implementer: Claude general-purpose ·
+Tester: Claude tdd agent · Reviewer: codex") before starting. If the user just says "go", use the
+all-Claude default and say so.
 
-### 5. Keep a simple progress record
+### 3. Turn the plan into a todo list
+Use **TodoWrite** to create one todo per phase/task in the plan, preserving its ordering and
+dependencies. This is the live progress view. Keep exactly one item `in_progress`, mark it `completed`
+the moment its implement→test→review loop passes. Don't batch completions — that's what looks stalled.
+
+### 4. Implement in the background, and monitor
+For each task (respecting dependencies), **dispatch the implementer as a background subagent** (run it
+in the background so you stay responsive and the user isn't blocked). Give the subagent: the task, the
+relevant plan section, the files/paths involved, and the acceptance criteria. While it runs:
+- **Monitor** it — you are re-invoked when a background subagent finishes; report a one-line result.
+- Keep the **todo list** and **PROGRESS.md** current as tasks move.
+- You may run independent tasks concurrently, but respect the plan's dependencies — don't start a task
+  whose inputs aren't done.
+
+### 5. Gate each chunk: tester + reviewer
+When an implementer subagent returns a chunk of work, before marking the todo done:
+- Spawn the **tester** subagent to run the build/tests/lint for that change and report pass/fail with
+  details.
+- Spawn the **reviewer** subagent to review the diff for correctness, security, and whether it matches
+  the plan.
+- If tests fail or the reviewer flags a real issue, loop back: hand the findings to the implementer for
+  a fix, then re-test/re-review. Only mark the todo `completed` when tests pass and review is clean.
+- Surface a short summary of each gate in chat (tests: X passed; review: clean / N issues fixed).
+
+### 6. Surface every decision in chat — never silently, never delegated
+When something needs the user (a missing secret/value, a go/no-go on an irreversible or production
+step, a real choice between options), **ask a clear, specific question in chat and wait**. State what
+you need, why, and what each answer leads to.
+- **Never delegate a risky/irreversible action to a background subagent.** Deploys, schema changes,
+  deletions, cutovers, anything touching production or money: do not run them yourself and do not let a
+  subagent run them — give the user the exact command and let them run it, or get explicit per-step
+  approval first. See the global action rules. Background subagents are for normal, reversible build
+  work only.
+
+### 7. Keep a simple progress record
 Write a short `PROGRESS.md` next to the plan (or in the run folder) and keep it current: a checklist of
-phases/tasks with ✓/▶/○, key results (tests passed, files changed), and any open question. It's a plain
-file — readable, shareable, no server. Update it as you go.
+phases/tasks with ✓/▶/○, the crew used, key results (tests passed, files changed, review outcome), and
+any open question. Plain file — readable, shareable, no server.
 
-### 6. Announce completion
-When the plan is done, post a short **completion report in chat**: what shipped (phases/tasks done),
-test/check results, any decisions made and how, anything deferred, and the paths touched. Mark all
-todos completed. Don't end silently — the user expects an explicit "done" with a summary.
+### 8. Announce completion
+When the plan is done, post a short **completion report in chat**: what shipped, the crew that ran it,
+test/review results, decisions made and how, anything deferred, and the paths touched. Mark all todos
+completed. Don't end silently.
 
 ## Principles
-- **One executor, one truth.** You do the work; the todo list + PROGRESS.md + chat are the only status
-  surfaces. No background processes, no polling, no dashboard state to drift.
-- **Stable over fancy.** Native todos beat a custom live dashboard: they can't get stuck "reconnecting"
-  and never look idle while you're actually working.
-- **Honest about pauses.** If you're waiting on the user, say so in chat plainly. If a step is long,
-  say "this will take a while" rather than going quiet.
-- **Safety first on irreversible work.** Hand production/destructive commands to the user with exact
-  steps; get explicit approval per step. See the global action rules.
+- **Orchestrator + crew.** You coordinate; subagents do the implement/test/review work. The user picks
+  the crew up front and can change it any time.
+- **Background, monitored.** Implementation runs in the background so the session stays responsive; you
+  watch it and report, rather than blocking on each step or going quiet.
+- **Every chunk is tested and reviewed** before it counts as done — the tester and reviewer are gates,
+  not afterthoughts.
+- **Stable over fancy.** Native todos + PROGRESS.md + chat are the only status surfaces. No background
+  daemon, no custom dashboard to drift or get stuck "reconnecting".
+- **Safety first on irreversible work.** Production/destructive commands go to the user with exact
+  steps and explicit per-step approval — never auto-run, never delegated to a subagent.
+- **Honest about pauses.** If you're waiting on a subagent or on the user, say so plainly in chat.
 
 ## Notes
-- No scripts ship with this skill — it is pure instructions over Claude's native tools. That's the
-  point: nothing to install, vendor, or keep in sync, so it can't fall out of date.
+- No scripts ship with this skill — it is pure instructions over Claude's native tools (TodoWrite,
+  background subagents, and any installed model CLIs the user selects). Nothing to install or keep in
+  sync.
 - Pairs with `/auxly-council` (feed its `final-plan.md`) but works standalone with any plan file.
