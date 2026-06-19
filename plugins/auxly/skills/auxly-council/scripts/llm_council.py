@@ -467,6 +467,23 @@ def anonymize_text(text: str) -> str:
     return pattern.sub("[REDACTED]", text)
 
 
+# Headers a planner's Markdown must contain to count as a valid plan.
+# Mirrors references/templates/plan.md. Keep the two in sync.
+REQUIRED_PLAN_HEADERS = [
+    "# Plan",
+    "## Overview",
+    "## Scope",
+    "## Phases",
+    "## Testing Strategy",
+    "## Risks",
+    "## Pros",
+    "## Cons",
+    "## Rollback Plan",
+    "## Edge Cases",
+    "## Open Questions",
+]
+
+
 def validate_markdown_plan(text: str) -> Tuple[bool, Optional[str]]:
     missing = [header for header in REQUIRED_PLAN_HEADERS if header not in text]
     if missing:
