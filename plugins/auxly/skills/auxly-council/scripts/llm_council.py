@@ -1478,10 +1478,14 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system
 .scrollbox::-webkit-scrollbar{width:10px;}
 .scrollbox::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;}
 .scrollbox::-webkit-scrollbar-track{background:transparent;}
-.flow{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.2rem 0 1.5rem;padding:1rem 1.1rem;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow-x:auto;}
-.flow-step{display:flex;align-items:center;gap:.55rem;background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:9px;padding:.5rem .8rem;font-size:.85rem;color:var(--text);}
-.flow-step .flow-n{display:inline-flex;align-items:center;justify-content:center;width:1.55rem;height:1.55rem;flex:none;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0e1016;font-weight:700;font-size:.78rem;}
-.flow-arrow{color:var(--accent2);font-size:1.15rem;flex:none;}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;margin:.2rem 0 1.5rem;padding:1.1rem;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow-x:auto;}
+.flow.vertical{flex-direction:column;align-items:stretch;}
+.flow-step{display:flex;align-items:center;gap:.6rem;background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:9px;padding:.55rem .85rem;font-size:.88rem;color:var(--text);}
+.flow.vertical .flow-step{width:100%;}
+.flow-step .flow-n{display:inline-flex;align-items:center;justify-content:center;width:1.6rem;height:1.6rem;flex:none;border-radius:50%;background:var(--accent);color:#0e1016;font-weight:700;font-size:.8rem;box-shadow:0 0 0 3px rgba(255,255,255,.04);}
+.flow-name{font-weight:600;}
+.flow-sub{color:var(--muted);font-size:.72rem;margin-left:.15rem;white-space:nowrap;}
+.flow-arrow{color:var(--muted);font-size:1.2rem;flex:none;align-self:center;line-height:1;}
 .section-label{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:1.8rem 0 .6rem;font-weight:700;}
 .final{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:.4rem 1.3rem 1.1rem;}
 /* shared rich-text (prose) styling for the final plan and each model's plan */
@@ -1545,31 +1549,64 @@ def _plan_title(task_brief: str) -> str:
     return _html.escape(first) or "Implementation plan"
 
 
-_PHASE_RE = re.compile(r"^\s{0,3}#{3,4}\s+(Phase\b[^\n]*)$", re.MULTILINE)
+_PHASE_RE = re.compile(r"^\s{0,3}#{3}\s+(Phase\b[^\n]*)$", re.MULTILINE)
+_TASK_RE = re.compile(r"^\s{0,4}#{4}\s+", re.MULTILINE)
+_H2_RE = re.compile(r"^\s{0,3}#{2}\s+", re.MULTILINE)
+# Per-node colors so the workflow reads as a colorful pipeline, not one flat block.
+_FLOW_PALETTE = [
+    "#7c83fd", "#5ad1c4", "#2dd4a7", "#f6a96b",
+    "#ff6b81", "#c084fc", "#fbbf24", "#38bdf8",
+]
 
 
 def _phase_flow_html(final_text: str) -> str:
     """Render the plan's phases (### Phase N: ...) as a self-contained CSS workflow.
-    Returns "" when fewer than 2 phases are found (so it only shows when applicable)."""
-    names = []
-    for m in _PHASE_RE.finditer(final_text or ""):
-        names.append(m.group(1).strip())
-        if len(names) >= 12:
-            break
-    if len(names) < 2:
+
+    Dynamic: each node shows the phase name + its task count (#### Task ...), the
+    layout flips between horizontal and vertical based on how many/large the
+    phases are, and each node gets its own color. Returns "" when fewer than 2
+    phases are found (so it only shows when applicable)."""
+    text = final_text or ""
+    matches = list(_PHASE_RE.finditer(text))
+    if len(matches) < 2:
         return ""
-    steps = []
-    for i, raw in enumerate(names, 1):
+    phases = []
+    for idx, mt in enumerate(matches[:12]):
+        raw = mt.group(1).strip()
         label = raw
         mm = re.match(r"Phase\s*\d+\s*[:\-–]\s*(.+)$", raw, re.IGNORECASE)
         if mm:
             label = mm.group(1).strip()
-        label = _html.escape(label) or f"Phase {i}"
+        seg_start = mt.end()
+        seg_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        h2 = _H2_RE.search(text, seg_start, seg_end)  # stop counting at next top-level section
+        if h2:
+            seg_end = h2.start()
+        ntasks = len(_TASK_RE.findall(text[seg_start:seg_end]))
+        phases.append((label, ntasks))
+
+    n = len(phases)
+    longest = max(len(p[0]) for p in phases)
+    vertical = n >= 5 or longest > 24          # long names or many phases read better stacked
+    orient = "vertical" if vertical else "horizontal"
+    arrow = "↓" if vertical else "→"
+
+    steps = []
+    for i, (label, ntasks) in enumerate(phases, 1):
+        color = _FLOW_PALETTE[(i - 1) % len(_FLOW_PALETTE)]
+        safe = _html.escape(label) or f"Phase {i}"
+        sub = ""
+        if ntasks:
+            sub = f'<span class="flow-sub">{ntasks} task{"s" if ntasks != 1 else ""}</span>'
         if i > 1:
-            steps.append('<div class="flow-arrow">→</div>')
-        steps.append(f'<div class="flow-step"><span class="flow-n">{i}</span>{label}</div>')
+            steps.append(f'<div class="flow-arrow">{arrow}</div>')
+        steps.append(
+            f'<div class="flow-step" style="border-left-color:{color}">'
+            f'<span class="flow-n" style="background:{color}">{i}</span>'
+            f'<span class="flow-name">{safe}</span>{sub}</div>'
+        )
     return ('<div class="section-label">Workflow</div>'
-            '<div class="flow">' + "".join(steps) + "</div>")
+            f'<div class="flow {orient}">' + "".join(steps) + "</div>")
 
 
 def render_plan_html(

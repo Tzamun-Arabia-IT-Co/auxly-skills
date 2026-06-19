@@ -1,6 +1,6 @@
 {
   "name": "auxly-skills",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Auxly Skills — a bias-resistant multi-model planning council (→ vetted final-plan.md + a self-contained branded plan.html) and a simple native-todo plan executor. No servers, no external deps. Installs into Claude Code, Codex, Gemini, Qwen, OpenCode, Kimi, Antigravity and Cursor.",
   "bin": {
     "auxly-skills": "bin/auxly-skills.js"
