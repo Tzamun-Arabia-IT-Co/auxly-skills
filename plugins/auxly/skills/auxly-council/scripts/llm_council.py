@@ -1527,15 +1527,27 @@ body::after{
 .scrollbox::-webkit-scrollbar-track{background:transparent;}
 
 /* ---- workflow ---- */
-.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:.6rem;margin:.2rem 0 1.6rem;padding:1.3rem;border-radius:16px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);overflow-x:auto;}
-.flow.vertical{flex-direction:column;}
-.flow-step{position:relative;display:flex;align-items:center;gap:.7rem;background:linear-gradient(160deg,var(--panel-2),transparent);border:1px solid var(--line);border-left:3px solid var(--teal);border-radius:11px;padding:.7rem 1rem;font-size:.9rem;color:var(--text);transition:transform .18s,border-color .18s;}
-.flow-step:hover{transform:translateY(-2px);border-color:var(--line-2);}
-.flow.vertical .flow-step{width:100%;}
-.flow-step .flow-n{display:inline-flex;align-items:center;justify-content:center;width:1.7rem;height:1.7rem;flex:none;border-radius:9px;background:var(--teal);color:var(--ink);font:700 .82rem/1 var(--mono);box-shadow:0 6px 16px -6px currentColor;}
-.flow-name{font-weight:600;letter-spacing:.01em;}
-.flow-sub{font:500 .68rem/1 var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--dim);white-space:nowrap;margin-left:.1rem;}
-.flow-arrow{display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:1.25rem;flex:none;line-height:1;}
+.flow{margin:.2rem 0 1.6rem;padding:1.4rem;border-radius:16px;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);}
+/* shared number badge */
+.flow-n{display:inline-flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;flex:none;border-radius:9px;background:var(--teal);color:var(--ink);font:700 .82rem/1 var(--mono);box-shadow:0 6px 18px -5px currentColor;}
+.flow-name{font-weight:600;letter-spacing:.01em;color:var(--text);}
+.flow-sub{font:500 .66rem/1 var(--mono);text-transform:uppercase;letter-spacing:.09em;color:var(--dim);white-space:nowrap;}
+
+/* horizontal: single no-wrap track that scrolls (no ragged wrapping) */
+.flow.horizontal{display:flex;flex-wrap:nowrap;align-items:center;gap:.55rem;overflow-x:auto;padding-bottom:.5rem;}
+.flow.horizontal .flow-step{display:flex;align-items:center;gap:.7rem;flex:none;background:linear-gradient(160deg,var(--panel-2),transparent);border:1px solid var(--line);border-left:3px solid var(--teal);border-radius:12px;padding:.7rem 1rem;font-size:.9rem;transition:transform .18s,border-color .18s;}
+.flow.horizontal .flow-step:hover{transform:translateY(-2px);border-color:var(--line-2);}
+.flow-arrow{flex:none;color:var(--dim);font-size:1.2rem;line-height:1;}
+
+/* vertical: timeline with a continuous connecting rail */
+.flow.vertical{display:flex;flex-direction:column;}
+.tl-item{position:relative;display:flex;align-items:flex-start;gap:.95rem;padding-bottom:1.4rem;}
+.tl-item:last-child{padding-bottom:0;}
+.tl-item::before{content:"";position:absolute;left:.875rem;top:1.9rem;bottom:-.1rem;width:2px;transform:translateX(-50%);background:linear-gradient(var(--line-2),rgba(255,255,255,.04));}
+.tl-item:last-child::before{display:none;}
+.tl-item .flow-n{position:relative;z-index:1;border-radius:50%;}
+.tl-body{display:flex;flex-direction:column;gap:.25rem;padding-top:.2rem;}
+.tl-name{font-weight:600;font-size:.96rem;color:var(--text);}
 
 /* ---- final plan + prose ---- */
 .final{padding:.4rem 1.6rem 1.4rem;border-radius:16px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--violet);box-shadow:var(--shadow);}
@@ -1654,26 +1666,40 @@ def _phase_flow_html(final_text: str) -> str:
 
     n = len(phases)
     longest = max(len(p[0]) for p in phases)
-    vertical = n >= 5 or longest > 24          # long names or many phases read better stacked
-    orient = "vertical" if vertical else "horizontal"
-    arrow = "↓" if vertical else "→"
+    # Long names or many phases read better as a vertical timeline; short/few as a row.
+    vertical = n >= 5 or longest > 22
 
-    steps = []
-    for i, (label, ntasks) in enumerate(phases, 1):
-        color = _FLOW_PALETTE[(i - 1) % len(_FLOW_PALETTE)]
-        safe = _html.escape(label) or f"Phase {i}"
-        sub = ""
-        if ntasks:
-            sub = f'<span class="flow-sub">{ntasks} task{"s" if ntasks != 1 else ""}</span>'
-        if i > 1:
-            steps.append(f'<div class="flow-arrow">{arrow}</div>')
-        steps.append(
-            f'<div class="flow-step" style="border-left-color:{color}">'
-            f'<span class="flow-n" style="background:{color}">{i}</span>'
-            f'<span class="flow-name">{safe}</span>{sub}</div>'
-        )
-    return ('<div class="section-label">Workflow</div>'
-            f'<div class="flow {orient}">' + "".join(steps) + "</div>")
+    def _sub(ntasks: int) -> str:
+        if not ntasks:
+            return ""
+        return f'<span class="flow-sub">{ntasks} task{"s" if ntasks != 1 else ""}</span>'
+
+    if vertical:
+        items = []
+        for i, (label, ntasks) in enumerate(phases, 1):
+            color = _FLOW_PALETTE[(i - 1) % len(_FLOW_PALETTE)]
+            safe = _html.escape(label) or f"Phase {i}"
+            items.append(
+                '<div class="tl-item">'
+                f'<span class="flow-n" style="background:{color};box-shadow:0 0 0 4px {color}22,0 6px 18px -5px {color}">{i}</span>'
+                f'<div class="tl-body"><span class="tl-name">{safe}</span>{_sub(ntasks)}</div></div>'
+            )
+        inner = '<div class="flow vertical">' + "".join(items) + "</div>"
+    else:
+        steps = []
+        for i, (label, ntasks) in enumerate(phases, 1):
+            color = _FLOW_PALETTE[(i - 1) % len(_FLOW_PALETTE)]
+            safe = _html.escape(label) or f"Phase {i}"
+            if i > 1:
+                steps.append('<span class="flow-arrow">→</span>')
+            steps.append(
+                f'<div class="flow-step" style="border-left-color:{color}">'
+                f'<span class="flow-n" style="background:{color}">{i}</span>'
+                f'<span class="flow-name">{safe}</span>{_sub(ntasks)}</div>'
+            )
+        inner = '<div class="flow horizontal">' + "".join(steps) + "</div>"
+
+    return '<div class="section-label">Workflow</div>' + inner
 
 
 def render_plan_html(
