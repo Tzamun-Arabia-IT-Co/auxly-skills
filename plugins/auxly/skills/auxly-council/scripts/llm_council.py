@@ -467,20 +467,16 @@ def anonymize_text(text: str) -> str:
     return pattern.sub("[REDACTED]", text)
 
 
-# Headers a planner's Markdown must contain to count as a valid plan.
-# Mirrors references/templates/plan.md. Keep the two in sync.
+# Headers a planner's Markdown must contain to count as a *valid* plan.
+# Intentionally the structural backbone only — a titled, phased plan — NOT the
+# full references/templates/plan.md section list. Some good CLIs (e.g. agy) emit
+# a solid plan but drop trailing sections like Pros/Cons/Open Questions; rejecting
+# those outright drops a whole council member over formatting. The judge merges and
+# fills gaps, so we accept any plan that has a title and phases and let quality be
+# judged, not gate-kept by header completeness.
 REQUIRED_PLAN_HEADERS = [
     "# Plan",
-    "## Overview",
-    "## Scope",
     "## Phases",
-    "## Testing Strategy",
-    "## Risks",
-    "## Pros",
-    "## Cons",
-    "## Rollback Plan",
-    "## Edge Cases",
-    "## Open Questions",
 ]
 
 
@@ -1127,7 +1123,10 @@ def run_planners(
     ui_state: Optional["ui_server.UIState"] = None,
     ui_instance: Optional["ui_server.UIServer"] = None,
 ) -> List[AgentResult]:
-    results: List[AgentResult] = []
+    # One result per planner, keyed by name. Retries OVERWRITE the prior attempt
+    # so a planner that fails-then-passes (or just fails N times) shows as a single
+    # card with its final status — not one card per attempt.
+    results_by_name: Dict[str, AgentResult] = {}
     remaining = planners[:]
     attempt = 0
     while remaining and attempt <= RETRY_LIMIT:
@@ -1165,7 +1164,7 @@ def run_planners(
 
         remaining = []
         for planner, msg in spawn_failures:
-            results.append(AgentResult(name=planner.name, raw_output="", data=None, valid=False, error=msg))
+            results_by_name[planner.name] = AgentResult(name=planner.name, raw_output="", data=None, valid=False, error=msg)
         for entry in running:
             try:
                 raw = collect_cli_output(entry, timeout_sec)
@@ -1206,7 +1205,7 @@ def run_planners(
                 valid=valid,
                 error=err,
             )
-            results.append(result)
+            results_by_name[entry.config.name] = result
             # Retry only structural/validation failures — those often pass on a
             # second try. A timeout almost never recovers and would otherwise burn
             # another full --timeout window per attempt, so fail it fast instead.
@@ -1224,7 +1223,8 @@ def run_planners(
                 remaining.append(entry.config)
 
         attempt += 1
-    return results
+    # Preserve the original council order; one entry per planner.
+    return [results_by_name[p.name] for p in planners if p.name in results_by_name]
 
 
 def run_judge(
