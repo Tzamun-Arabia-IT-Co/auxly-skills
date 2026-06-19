@@ -1463,8 +1463,25 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system
 .head h1{font-size:1.5rem;margin:0;font-weight:700;}
 .head h1 span{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
 .sub{color:var(--muted);font-size:.85rem;margin:0 0 1.4rem;}
-.brief{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:.9rem 1.1rem;margin-bottom:1.5rem;color:var(--muted);font-size:.9rem;}
+.brief{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:.9rem 1.1rem;margin-bottom:1.5rem;}
 .brief b{color:var(--text);}
+.plan-title{font-size:1.18rem;font-weight:700;color:#fff;line-height:1.3;margin:.15rem 0 .25rem;}
+.members{display:flex;flex-wrap:wrap;gap:.45rem;margin:0 0 1.5rem;}
+.member{display:inline-flex;align-items:center;gap:.45rem;font-size:.8rem;background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:.28rem .72rem;color:var(--text);}
+.member .dot{width:.5rem;height:.5rem;border-radius:50%;flex:none;}
+.member .dot.ok{background:var(--green);}
+.member .dot.failed{background:var(--red);}
+.brief-label{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;margin-bottom:.55rem;}
+.scrollbox{max-height:340px;overflow-y:auto;padding-right:.4rem;}
+.final.scrollbox{max-height:72vh;}
+.model-body.prose{max-height:480px;overflow-y:auto;padding-right:.4rem;}
+.scrollbox::-webkit-scrollbar{width:10px;}
+.scrollbox::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px;}
+.scrollbox::-webkit-scrollbar-track{background:transparent;}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:.2rem 0 1.5rem;padding:1rem 1.1rem;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow-x:auto;}
+.flow-step{display:flex;align-items:center;gap:.55rem;background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:9px;padding:.5rem .8rem;font-size:.85rem;color:var(--text);}
+.flow-step .flow-n{display:inline-flex;align-items:center;justify-content:center;width:1.55rem;height:1.55rem;flex:none;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0e1016;font-weight:700;font-size:.78rem;}
+.flow-arrow{color:var(--accent2);font-size:1.15rem;flex:none;}
 .section-label{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:1.8rem 0 .6rem;font-weight:700;}
 .final{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:.4rem 1.3rem 1.1rem;}
 /* shared rich-text (prose) styling for the final plan and each model's plan */
@@ -1508,6 +1525,53 @@ details[open] summary{border-bottom:1px solid var(--border);margin-bottom:.6rem;
 """
 
 
+def _plan_title(task_brief: str) -> str:
+    """Short human title for the header, derived from the task brief's first line."""
+    first = ""
+    for line in (task_brief or "").splitlines():
+        s = line.strip()
+        if s:
+            first = s
+            break
+    if first.lower().startswith("task:"):
+        first = first[5:].strip()
+    for stop in (". ", "; "):
+        idx = first.find(stop)
+        if 0 < idx <= 90:
+            first = first[:idx]
+            break
+    if len(first) > 90:
+        first = first[:88].rstrip() + "…"
+    return _html.escape(first) or "Implementation plan"
+
+
+_PHASE_RE = re.compile(r"^\s{0,3}#{3,4}\s+(Phase\b[^\n]*)$", re.MULTILINE)
+
+
+def _phase_flow_html(final_text: str) -> str:
+    """Render the plan's phases (### Phase N: ...) as a self-contained CSS workflow.
+    Returns "" when fewer than 2 phases are found (so it only shows when applicable)."""
+    names = []
+    for m in _PHASE_RE.finditer(final_text or ""):
+        names.append(m.group(1).strip())
+        if len(names) >= 12:
+            break
+    if len(names) < 2:
+        return ""
+    steps = []
+    for i, raw in enumerate(names, 1):
+        label = raw
+        mm = re.match(r"Phase\s*\d+\s*[:\-–]\s*(.+)$", raw, re.IGNORECASE)
+        if mm:
+            label = mm.group(1).strip()
+        label = _html.escape(label) or f"Phase {i}"
+        if i > 1:
+            steps.append('<div class="flow-arrow">→</div>')
+        steps.append(f'<div class="flow-step"><span class="flow-n">{i}</span>{label}</div>')
+    return ('<div class="section-label">Workflow</div>'
+            '<div class="flow">' + "".join(steps) + "</div>")
+
+
 def render_plan_html(
     run_dir: Path,
     task_brief: str,
@@ -1536,6 +1600,20 @@ def render_plan_html(
         cards.append(f"<details><summary>{pill} {label}</summary>{inner}</details>")
     cards_html = "\n".join(cards) or '<p class="sub">No council members ran.</p>'
 
+    # Council line-up shown up top: who sat on the council and whether they produced a plan.
+    chips = []
+    for r in planner_results:
+        cfg = by_name.get(r.name)
+        kind = (cfg.kind if cfg else "") or ""
+        model = _display_model(cfg) if cfg else ""
+        cls = "ok" if r.valid else "failed"
+        lbl = _html.escape(r.name + (f" · {kind}" if kind else "") + (f" · {model}" if model else ""))
+        chips.append(f'<span class="member"><span class="dot {cls}"></span>{lbl}</span>')
+    members_html = '<div class="members">' + "".join(chips) + "</div>" if chips else ""
+
+    title = _plan_title(task_brief)
+    brief_html = _md_to_html(task_brief or "_(no brief)_")
+    flow_html = _phase_flow_html(final_text)
     final_html = _md_to_html(final_text or "_No final plan was produced._")
     logo_img = f'<img src="{logo}" alt="Auxly"/>' if logo else ""
     run_label = _html.escape(run_dir.name)
@@ -1543,15 +1621,19 @@ def render_plan_html(
     doc = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Auxly Council — {run_label}</title>
+<title>Auxly Council — {title}</title>
 <style>{_PLAN_CSS}</style></head>
 <body><div class="wrap">
   <div class="head">{logo_img}<h1>Auxly <span>Council</span></h1></div>
+  <div class="plan-title">{title}</div>
   <p class="sub">Vetted plan · run {run_label} · {n_ok}/{len(planner_results)} council members produced a plan</p>
-  <div class="brief"><b>Task:</b> {_html.escape(task_brief or "(no brief)")}</div>
+  {members_html}
 
+  <div class="brief"><div class="brief-label">Task brief</div><div class="prose scrollbox">{brief_html}</div></div>
+
+  {flow_html}
   <div class="section-label">Final plan (merged &amp; vetted)</div>
-  <div class="final prose">{final_html}</div>
+  <div class="final prose scrollbox">{final_html}</div>
 
   <div class="section-label">Each council member's plan</div>
   {cards_html}
