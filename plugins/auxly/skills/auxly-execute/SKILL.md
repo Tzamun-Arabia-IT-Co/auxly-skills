@@ -8,8 +8,10 @@ description: >
   tester subagent (runs the relevant tests) and a reviewer subagent (code review) before moving on.
   Progress is shown live through Claude Code's native todo list plus a short PROGRESS.md. Any decision,
   missing value, or risky/irreversible step is surfaced as a clear question in chat — never silently,
-  and never delegated to a background agent. Use when the user accepts a plan and says "execute",
-  "run the plan", "build this", or "implement final-plan.md".
+  and never delegated to a background agent. When the run finishes it writes a self-contained,
+  Auxly-branded execute-report.html (implementation summary, files changed, how-to-test, git push
+  status, and token usage per agent/model) and opens it in the browser. Use when the user accepts a
+  plan and says "execute", "run the plan", "build this", or "implement final-plan.md".
 ---
 
 # Auxly Execute
@@ -63,6 +65,10 @@ relevant plan section, the files/paths involved, and the acceptance criteria. Wh
 - You may run independent tasks concurrently, but respect the plan's dependencies — don't start a task
   whose inputs aren't done.
 
+**Capture each subagent's cost.** When a background subagent finishes, its task notification includes
+`total_tokens` and `duration_ms`. Record them per subagent (role + agent + model) as you go — you'll
+report this as token-usage-by-agent in the final HTML report, and there's no other chance to capture it.
+
 ### 5. Gate each chunk: tester + reviewer
 When an implementer subagent returns a chunk of work, before marking the todo done:
 - Spawn the **tester** subagent to run the build/tests/lint for that change and report pass/fail with
@@ -93,6 +99,33 @@ When the plan is done, post a short **completion report in chat**: what shipped,
 test/review results, decisions made and how, anything deferred, and the paths touched. Mark all todos
 completed. Don't end silently.
 
+### 9. Write the HTML report (`execute-report.html`)
+After completion, generate a branded, self-contained HTML report so the user has a shareable record.
+Gather the data, then run the bundled renderer:
+
+```bash
+python3 <this skill dir>/scripts/render_report.py --spec report.json --out <run dir>
+```
+
+(or pipe the JSON on stdin). It writes `execute-report.html` next to the plan and opens it in the
+browser. **Assemble the JSON yourself** from what actually happened — do not invent values:
+- `title` / `goal` — the plan name and one-line goal.
+- `summary_md` — a short Markdown summary of what was built.
+- `phases` — `[{name,status,note}]` from your todo list (status: done / partial / blocked).
+- `changes` — files touched: `[{path,status,note}]` (status: added / modified / deleted). Get this from
+  `git status --porcelain` and `git diff --stat`.
+- `tests` — `{commands:[...], result:"…", status:"pass"|"fail"}`: the exact commands to re-run the
+  tests and the last result.
+- `git` — `{branch, remote, pushed, ahead, behind, uncommitted, last_commit}`. Gather with read-only
+  git: `git rev-parse --abbrev-ref HEAD`, `git status -sb`, `git rev-list --count @{u}..HEAD` (ahead)
+  and `@{u}` for behind, `git log -1 --oneline`. Set `pushed:true` only if ahead==0 and a remote
+  tracking branch exists; otherwise `pushed:false`. **Do not push** to set this true — just report it.
+- `crew` — one row per agent that worked: `[{role,agent,model,tokens,duration_s}]` using the
+  token/duration figures you captured in step 4. This is the token-usage-by-agent table.
+- `next_steps` — what the user should do next (push, open PR, finish a deferred task).
+
+The renderer is a pure presenter — it only displays what you pass and runs no git or shell itself.
+
 ## Principles
 - **Orchestrator + crew.** You coordinate; subagents do the implement/test/review work. The user picks
   the crew up front and can change it any time.
@@ -107,7 +140,8 @@ completed. Don't end silently.
 - **Honest about pauses.** If you're waiting on a subagent or on the user, say so plainly in chat.
 
 ## Notes
-- No scripts ship with this skill — it is pure instructions over Claude's native tools (TodoWrite,
-  background subagents, and any installed model CLIs the user selects). Nothing to install or keep in
-  sync.
+- The execution itself is pure native tools (TodoWrite, background subagents, and any installed model
+  CLIs the user selects) — nothing to install. The only bundled code is `scripts/render_report.py`, a
+  stdlib-only presenter that renders the final `execute-report.html` from JSON you assemble; it runs no
+  git or shell of its own.
 - Pairs with `/auxly-council` (feed its `final-plan.md`) but works standalone with any plan file.
