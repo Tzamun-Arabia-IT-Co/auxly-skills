@@ -1493,7 +1493,7 @@ body::after{
 /* ---- masthead ---- */
 .masthead{padding-bottom:1.6rem;margin-bottom:2rem;border-bottom:1px solid var(--line);}
 .brandrow{display:flex;align-items:center;gap:.85rem;margin-bottom:1.7rem;}
-.brandrow img{width:42px;height:42px;border-radius:12px;box-shadow:0 0 0 1px var(--line),0 8px 24px -8px rgba(84,212,196,.5);}
+.brandrow img{width:42px;height:42px;}
 .brand{font:700 1.45rem/1 var(--sans);letter-spacing:-.01em;color:#fff;}
 .brand em{font-style:normal;background:linear-gradient(90deg,var(--violet),var(--teal));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
 .kicker{margin-left:auto;font:600 .64rem/1 var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--teal);border:1px solid rgba(84,212,196,.35);background:rgba(84,212,196,.07);padding:.4rem .65rem;border-radius:6px;}
