@@ -1490,6 +1490,16 @@ body::after{
 }
 .wrap{position:relative;z-index:1;max-width:940px;margin:0 auto;padding:3rem 1.5rem 5rem;}
 
+/* drifting ambient light behind everything (additive glow, paused if reduced-motion) */
+.aurora{position:fixed;inset:-25%;z-index:0;pointer-events:none;filter:blur(70px);opacity:.55;}
+.aurora span{position:absolute;border-radius:50%;mix-blend-mode:screen;will-change:transform;}
+.aurora .a1{width:46vw;height:46vw;left:0;top:-8%;background:radial-gradient(circle,rgba(84,212,196,.55),transparent 64%);animation:drift1 24s ease-in-out infinite alternate;}
+.aurora .a2{width:44vw;height:44vw;right:-4%;top:-6%;background:radial-gradient(circle,rgba(155,140,245,.55),transparent 64%);animation:drift2 29s ease-in-out infinite alternate;}
+.aurora .a3{width:40vw;height:40vw;left:28%;bottom:-18%;background:radial-gradient(circle,rgba(246,185,122,.4),transparent 66%);animation:drift3 34s ease-in-out infinite alternate;}
+@keyframes drift1{from{transform:translate(0,0) scale(1);}to{transform:translate(13vw,9vh) scale(1.18);}}
+@keyframes drift2{from{transform:translate(0,0) scale(1);}to{transform:translate(-11vw,11vh) scale(1.12);}}
+@keyframes drift3{from{transform:translate(0,0) scale(1);opacity:.5;}to{transform:translate(8vw,-7vh) scale(1.22);opacity:.85;}}
+
 /* ---- masthead ---- */
 .masthead{padding-bottom:1.6rem;margin-bottom:2rem;border-bottom:1px solid var(--line);}
 .brandrow{display:flex;align-items:center;gap:.85rem;margin-bottom:1.7rem;}
@@ -1753,7 +1763,7 @@ def render_plan_html(
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Auxly Council — {title}</title>
 <style>{_PLAN_CSS}</style></head>
-<body><div class="wrap">
+<body><div class="aurora" aria-hidden="true"><span class="a1"></span><span class="a2"></span><span class="a3"></span></div><div class="wrap">
   <header class="masthead">
     <div class="brandrow">{logo_img}<span class="brand">Auxly <em>Council</em></span><span class="kicker">Vetted Plan</span></div>
     <h1 class="headline">{title}</h1>
